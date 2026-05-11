@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排課行事曆</title>
+<style>
+/* ── Reset & Base ── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;background:#f5f5f0;color:#1a1a1a;font-size:15px;line-height:1.6}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;padding:7px 10px;border:1px solid #d0d0c8;border-radius:8px;outline:none;width:100%;background:#fff;color:#1a1a1a}
+input:focus,select:focus,textarea:focus{border-color:#0F6E56;box-shadow:0 0 0 3px rgba(15,110,86,.1)}
+textarea{resize:none;height:60px}
+a{color:#0F6E56;text-decoration:none}
+
+/* ── Layout ── */
+.app{min-height:100vh;display:flex;flex-direction:column}
+.header{background:#fff;border-bottom:1px solid #e8e8e0;padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{font-size:17px;font-weight:600;color:#0F6E56;display:flex;align-items:center;gap:7px}
+.user-info{font-size:13px;color:#666;display:flex;align-items:center;gap:8px}
+.main{flex:1;padding:20px;max-width:900px;margin:0 auto;width:100%}
+
+/* ── Login ── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f5f0}
+.login-card{background:#fff;border-radius:16px;padding:2rem;width:360px;max-width:95vw;border:1px solid #e8e8e0}
+.login-card h1{font-size:20px;font-weight:600;margin-bottom:4px;color:#1a1a1a}
+.login-card p{font-size:13px;color:#888;margin-bottom:1.5rem}
+.form-row{margin-bottom:1rem}
+.form-row label{font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500}
+.btn-primary{width:100%;padding:10px;background:#0F6E56;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;margin-top:.5rem}
+.btn-primary:hover{background:#0a5540}
+.btn-primary:disabled{background:#ccc;cursor:not-allowed}
+.error-msg{color:#c0392b;font-size:13px;margin-top:8px;display:none}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.view-pills{display:flex;gap:4px}
+.pill{padding:6px 14px;font-size:13px;border-radius:8px;border:1px solid #d0d0c8;background:transparent;color:#666}
+.pill.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.nav-row{display:flex;align-items:center;gap:6px}
+.nav-btn{width:30px;height:30px;border:1px solid #d0d0c8;border-radius:8px;background:#fff;color:#666;display:flex;align-items:center;justify-content:center;font-size:16px}
+.nav-btn:hover{background:#f0f0e8}
+.period-label{font-size:15px;font-weight:600;color:#1a1a1a;min-width:170px;text-align:center}
+.toolbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.filter-chip{padding:4px 12px;font-size:12px;border-radius:999px;border:1px solid #d0d0c8;background:transparent;color:#666}
+.filter-chip.on{color:#fff;border-color:transparent}
+.add-btn{padding:7px 14px;font-size:13px;border-radius:8px;background:#0F6E56;color:#fff;border:none;display:flex;align-items:center;gap:5px}
+.add-btn:hover{background:#0a5540}
+.logout-btn{padding:5px 12px;font-size:12px;border-radius:8px;border:1px solid #d0d0c8;background:#fff;color:#666}
+.logout-btn:hover{background:#f0f0e8}
+.today-btn{padding:5px 10px;font-size:12px;border-radius:8px;border:1px solid #d0d0c8;background:#fff;color:#666}
+
+/* ── Day View ── */
+.day-list{display:flex;flex-direction:column;gap:8px}
+.day-card{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e8e8e0;border-radius:12px;padding:12px 16px;cursor:pointer;transition:border-color .15s}
+.day-card:hover{border-color:#0F6E56}
+.day-card.conflict{border-color:#e67e22}
+.day-card.mine{border-left:3px solid #0F6E56}
+.avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.card-body{flex:1;min-width:0}
+.card-title{font-size:14px;font-weight:600;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-meta{font-size:12px;color:#888;margin-top:2px;display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.time-col{font-size:13px;font-weight:500;color:#888;text-align:right;white-space:nowrap;min-width:72px}
+.seq-badge{font-size:10px;background:#f0f0e8;color:#888;padding:1px 6px;border-radius:999px}
+.conflict-tag{font-size:11px;background:#fef3e2;color:#b7660a;padding:2px 7px;border-radius:999px;display:flex;align-items:center;gap:3px}
+.loc-tag{font-size:11px;padding:2px 7px;border-radius:999px}
+.loc-2f{background:#E1F5EE;color:#085041}
+.loc-b1{background:#dbeafe;color:#1e3a8a}
+.loc-field{background:#fef3e2;color:#b7660a}
+.loc-none{background:#f0f0e8;color:#888}
+.empty-state{text-align:center;padding:3rem;color:#bbb;font-size:14px}
+.empty-icon{font-size:40px;margin-bottom:12px}
+
+/* ── Month View ── */
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#e8e8e0;border:1px solid #e8e8e0;border-radius:12px;overflow:hidden}
+.month-head{background:#f5f5f0;padding:6px;font-size:12px;color:#888;text-align:center;font-weight:500}
+.month-cell{background:#fff;padding:6px;min-height:85px}
+.month-cell.other{background:#fafaf8}
+.day-num{font-size:12px;color:#999;margin-bottom:3px}
+.day-num.today{background:#1a1a1a;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px}
+.month-pill{font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.month-more{font-size:10px;color:#aaa;cursor:pointer}
+
+/* ── Week View ── */
+.week-wrap{border:1px solid #e8e8e0;border-radius:12px;overflow:hidden;background:#fff}
+.week-head-row{display:grid;grid-template-columns:52px repeat(7,1fr);border-bottom:1px solid #e8e8e0}
+.week-head-cell{background:#f5f5f0;padding:7px 4px;text-align:center}
+.week-day-name{font-size:11px;color:#888}
+.week-day-num{font-size:16px;font-weight:600;color:#1a1a1a;margin-top:1px}
+.week-day-num.today{background:#1a1a1a;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;margin:1px auto 0}
+.week-body-scroll{overflow-y:auto;max-height:460px}
+.week-body-grid{display:grid;grid-template-columns:52px repeat(7,1fr)}
+.hour-label{font-size:10px;color:#bbb;padding:0 6px;height:48px;display:flex;align-items:flex-start;padding-top:4px;justify-content:flex-end;border-bottom:1px solid #f0f0e8}
+.week-col{border-left:1px solid #f0f0e8;position:relative;height:48px;border-bottom:1px solid #f0f0e8}
+.week-event{position:absolute;left:2px;right:2px;border-radius:4px;padding:2px 5px;font-size:9px;font-weight:600;overflow:hidden;color:#fff;z-index:2;cursor:pointer;line-height:1.3}
+
+/* ── Half Year ── */
+.half-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:600px){.half-grid{grid-template-columns:repeat(2,1fr)}}
+.mini-month-title{font-size:12px;font-weight:600;color:#888;margin-bottom:6px;text-align:center}
+.mini-cal{width:100%;border-collapse:collapse}
+.mini-cal th{font-size:10px;color:#bbb;text-align:center;padding:1px}
+.mini-cal td{text-align:center;padding:2px 1px;font-size:11px;color:#888;cursor:pointer;border-radius:3px}
+.mini-cal td:hover{background:#f0f0e8}
+.mini-cal td.has-class{font-weight:600;color:#1a1a1a}
+.mini-cal td.today-cell{background:#1a1a1a;color:#fff;border-radius:50%}
+.dot-row{display:flex;justify-content:center;gap:2px;margin-top:1px}
+.dot{width:4px;height:4px;border-radius:50%}
+
+/* ── Modal ── */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
+.modal-backdrop.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:1.5rem;width:420px;max-width:95vw;max-height:90vh;overflow-y:auto;border:1px solid #e8e8e0}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}
+.modal-title{font-size:16px;font-weight:600;color:#1a1a1a}
+.close-btn{width:28px;height:28px;border:none;background:none;font-size:18px;color:#aaa;display:flex;align-items:center;justify-content:center;border-radius:6px}
+.close-btn:hover{background:#f0f0e8}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lt-group{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.lt-btn{padding:5px 12px;font-size:12px;border-radius:999px;border:1px solid #d0d0c8;background:#fff;color:#666}
+.lt-btn.active{background:#0F6E56;color:#fff;border-color:#0F6E56}
+.room-option{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e8e8e0;border-radius:8px;cursor:pointer;font-size:13px}
+.room-option.selected{border-color:#0F6E56}
+.room-option input[type=radio]{accent-color:#0F6E56}
+.warn-box{background:#fef3e2;border:1px solid #f0a500;border-radius:8px;padding:8px 12px;font-size:12px;color:#7d5a00;margin-bottom:.75rem;display:none}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem}
+.btn-cancel{padding:7px 14px;font-size:13px;border-radius:8px;border:1px solid #d0d0c8;background:#fff;color:#666}
+.btn-save{padding:7px 14px;font-size:13px;border-radius:8px;border:none;background:#0F6E56;color:#fff}
+.btn-save:hover{background:#0a5540}
+.btn-danger{padding:7px 14px;font-size:13px;border-radius:8px;border:none;background:#e74c3c;color:#fff}
+
+/* ── Detail Modal ── */
+.detail-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-size:13px;color:#666;border-bottom:1px solid #f0f0e8}
+.detail-row:last-child{border:none}
+.detail-icon{color:#bbb;flex-shrink:0;width:16px;margin-top:1px}
+.student-tag{padding:3px 10px;background:#f5f5f0;border-radius:999px;font-size:12px;color:#555}
+
+/* ── Loading ── */
+.loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:2rem;color:#aaa;font-size:14px}
+.spinner{width:20px;height:20px;border:2px solid #e0e0d8;border-top-color:#0F6E56;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div class="login-wrap" id="login-screen">
+  <div class="login-card">
+    <h1>📅 排課行事曆</h1>
+    <p>請輸入帳號與密碼登入</p>
+    <div class="form-row">
+      <label>帳號（姓名）</label>
+      <input type="text" id="login-user" placeholder="例：Kenny Tsai">
+    </div>
+    <div class="form-row">
+      <label>密碼</label>
+      <input type="password" id="login-pass" placeholder="請輸入密碼" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="error-msg" id="login-error">帳號或密碼錯誤，請重試</div>
+    <button class="btn-primary" id="login-btn" onclick="doLogin()">登入</button>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div class="app" id="app-screen" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">📅 排課行事曆</div>
+      <span id="role-tag" style="font-size:12px;padding:2px 10px;border-radius:999px;background:#E1F5EE;color:#085041"></span>
+    </div>
+    <div class="user-info">
+      <span id="user-name-display"></span>
+      <button class="logout-btn" onclick="doLogout()">登出</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="toolbar">
+      <div class="nav-row">
+        <button class="nav-btn" onclick="navigate(-1)">‹</button>
+        <span class="period-label" id="period-label"></span>
+        <button class="nav-btn" onclick="navigate(1)">›</button>
+        <button class="today-btn" onclick="goToday()">今天</button>
+      </div>
+      <div class="view-pills">
+        <button class="pill active" onclick="switchView('day')">日</button>
+        <button class="pill" onclick="switchView('week')">週</button>
+        <button class="pill" onclick="switchView('month')">月</button>
+        <button class="pill" onclick="switchView('half')">半年</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div id="coach-filters" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="add-btn" id="add-class-btn" onclick="openAddModal()" style="display:none">＋ 新增課程</button>
+        <button style="padding:7px 12px;font-size:13px;border-radius:8px;border:1px solid #d0d0c8;background:#fff;color:#666" onclick="loadClasses()">↻ 重新整理</button>
+      </div>
+    </div>
+
+    <div id="cal-loading" class="loading"><div class="spinner"></div>載入中...</div>
+    <div id="cal-root" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══════════ ADD/EDIT MODAL ══════════ -->
+<div class="modal-backdrop" id="form-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="form-title">新增課程</div>
+      <button class="close-btn" onclick="closeFormModal()">✕</button>
+    </div>
+    <div class="form-row"><label>課程名稱</label><input type="text" id="f-name" placeholder="例：KT 教半"></div>
+    <div class="grid-2" style="margin-bottom:.75rem">
+      <div class="form-row" style="margin-bottom:0">
+        <label>教練</label>
+        <select id="f-coach"></select>
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label>上課地點</label>
+        <div class="lt-group">
+          <button class="lt-btn active" onclick="setLocType('room')">🏢 教室</button>
+          <button class="lt-btn" onclick="setLocType('field')">📍 外勤</button>
+          <button class="lt-btn" onclick="setLocType('none')">— 無</button>
+        </div>
+      </div>
+    </div>
+    <div id="room-picker" style="margin-bottom:.75rem">
+      <label style="font-size:12px;color:#666;font-weight:500;display:block;margin-bottom:6px">選擇教室位置</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="room-options"></div>
+    </div>
+    <div id="field-picker" style="display:none;margin-bottom:.75rem">
+      <label style="font-size:12px;color:#666;font-weight:500;display:block;margin-bottom:4px">外勤地點名稱</label>
+      <input type="text" id="f-location" placeholder="例：大安森林公園球場">
+    </div>
+    <div class="grid-2">
+      <div class="form-row"><label>開始時間</label><input type="datetime-local" id="f-start"></div>
+      <div class="form-row"><label>結束時間</label><input type="datetime-local" id="f-end"></div>
+    </div>
+    <div class="form-row"><label>已報名學員（逗號分隔）</label><textarea id="f-students" placeholder="王小明, 陳美麗"></textarea></div>
+    <div class="warn-box" id="warn-box">⚠️ <span id="warn-msg"></span>（仍可儲存）</div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeFormModal()">取消</button>
+      <button class="btn-danger" id="delete-btn" onclick="deleteClass()" style="display:none;margin-right:auto">刪除課程</button>
+      <button class="btn-save" onclick="saveClass()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DETAIL MODAL ══════════ -->
+<div class="modal-backdrop" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="avatar" id="d-avatar" style="width:42px;height:42px;font-size:13px"></div>
+        <div>
+          <div id="d-name" style="font-size:16px;font-weight:600;color:#1a1a1a"></div>
+          <div id="d-sub" style="font-size:12px;color:#888"></div>
+        </div>
+      </div>
+      <button class="close-btn" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div id="d-body"></div>
+    <div id="d-students" style="margin-top:12px"></div>
+    <div class="modal-footer" id="d-actions"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  !! 填入你的 Apps Script Web App URL !!
+// ══════════════════════════════════════════════════════
+const API_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+
+// ── 資料 ──────────────────────────────────────────────
+const ROOMS = [
+  {id:'2f-front',label:'2樓前半',floor:'2f'},
+  {id:'2f-back', label:'2樓後半',floor:'2f'},
+  {id:'b1-front',label:'樓下前半',floor:'b1'},
+  {id:'b1-back', label:'樓下後半',floor:'b1'},
+];
+const ROOM_MAP = Object.fromEntries(ROOMS.map(r=>[r.id,r]));
+const DTW = ['日','一','二','三','四','五','六'];
+const MTW = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+let currentUser  = null;
+let coaches      = [];
+let classes      = [];
+let coachFilter  = new Set();
+let currentView  = 'day';
+let currentDate  = new Date();
+let editingId    = null;
+let currentLocType = 'room';
+let selectedRoom   = '2f-front';
+
+// ── API ───────────────────────────────────────────────
+async function api(action, data={}) {
+  const res = await fetch(API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action, token: getToken(), ...data})
+  });
+  return res.json();
+}
+
+function getToken() {
+  if (!currentUser) return null;
+  return btoa(JSON.stringify(currentUser));
+}
+
+// ── 登入 ─────────────────────────────────────────────
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!username || !password) return;
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = '登入中...';
+  const res = await api('login', {username, password});
+  btn.disabled = false; btn.textContent = '登入';
+  if (res.success) {
+    currentUser = res.coach;
+    document.getElementById('login-error').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    initApp();
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+function doLogout() {
+  currentUser = null;
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-pass').value = '';
+}
+
+// ── 初始化 ────────────────────────────────────────────
+async function initApp() {
+  document.getElementById('user-name-display').textContent = currentUser.name;
+  document.getElementById('role-tag').textContent = currentUser.role === 'admin' ? '管理員' : '教練';
+  if (currentUser.role === 'admin') {
+    document.getElementById('add-class-btn').style.display = 'flex';
+  }
+  const res = await api('getCoaches');
+  coaches = res.coaches || [];
+  coachFilter = new Set(coaches.map(c=>String(c.id)));
+  renderFilters();
+  await loadClasses();
+}
+
+async function loadClasses() {
+  document.getElementById('cal-loading').style.display = 'flex';
+  document.getElementById('cal-root').style.display = 'none';
+  const res = await api('getClasses');
+  classes = (res.classes || []).sort((a,b)=>a.seq-b.seq);
+  document.getElementById('cal-loading').style.display = 'none';
+  document.getElementById('cal-root').style.display = 'block';
+  render();
+}
+
+// ── 篩選器 ────────────────────────────────────────────
+function renderFilters() {
+  const el = document.getElementById('coach-filters');
+  el.innerHTML = '';
+  coaches.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-chip' + (coachFilter.has(String(c.id)) ? ' on' : '');
+    if (coachFilter.has(String(c.id))) btn.style.background = c.color;
+    btn.textContent = c.abbr;
+    btn.title = c.name;
+    btn.onclick = () => {
+      if (coachFilter.has(String(c.id))) { if(coachFilter.size>1) coachFilter.delete(String(c.id)); }
+      else coachFilter.add(String(c.id));
+      renderFilters(); render();
+    };
+    el.appendChild(btn);
+  });
+}
+
+function filteredClasses() {
+  return classes.filter(c => coachFilter.has(String(c.coachId)));
+}
+
+// ── 衝突偵測 ─────────────────────────────────────────
+function hasConflict(c) {
+  return classes.some(o => {
+    if (String(o.id) === String(c.id)) return false;
+    if (c.start >= o.end || c.end <= o.start) return false;
+    if (String(o.coachId) === String(c.coachId)) return true;
+    if (c.locType === 'room' && o.locType === 'room' && o.location === c.location) return true;
+    return false;
+  });
+}
+
+// ── 輔助 ─────────────────────────────────────────────
+const pad = n => String(n).padStart(2,'0');
+const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const fmtDT = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const getCoach = id => coaches.find(c=>String(c.id)===String(id)) || {name:'未知',abbr:'?',color:'#888',bg:'#eee',tc:'#333'};
+
+function locTagHTML(c) {
+  if (c.locType==='none') return '<span class="loc-tag loc-none">無地點</span>';
+  if (c.locType==='field') return `<span class="loc-tag loc-field">📍 ${c.location||'外勤'}</span>`;
+  const r = ROOM_MAP[c.location];
+  if (!r) return '';
+  const cls = r.floor==='2f' ? 'loc-2f' : 'loc-b1';
+  return `<span class="loc-tag ${cls}">🏢 ${r.label}</span>`;
+}
+
+function mondayOf(d) {
+  const day = d.getDay();
+  const r = new Date(d);
+  r.setDate(d.getDate() + (day===0 ? -6 : 1-day));
+  return r;
+}
+
+// ── 導航 ─────────────────────────────────────────────
+function switchView(v) {
+  currentView = v;
+  document.querySelectorAll('.pill').forEach((p,i) => {
+    p.className = 'pill' + (['day','week','month','half'][i]===v ? ' active' : '');
+  });
+  render();
+}
+
+function navigate(d) {
+  if (currentView==='day')   currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()+d);
+  else if (currentView==='week')  currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()+d*7);
+  else if (currentView==='month') currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+d, 1);
+  else                             currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+d*6, 1);
+  render();
+}
+
+function goToday() { currentDate = new Date(); render(); }
+
+// ── 日期標題 ──────────────────────────────────────────
+function renderLabel() {
+  const el = document.getElementById('period-label');
+  const y=currentDate.getFullYear(), m=currentDate.getMonth(), d=currentDate.getDate();
+  if (currentView==='day') el.textContent = `${y} ${MTW[m]} ${d}日（${DTW[currentDate.getDay()]}）`;
+  else if (currentView==='week') {
+    const mon=mondayOf(currentDate); const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    el.textContent = `${MTW[mon.getMonth()]} ${mon.getDate()}日 – ${MTW[sun.getMonth()]} ${sun.getDate()}日`;
+  } else if (currentView==='month') el.textContent = `${y} ${MTW[m]}`;
+  else el.textContent = `${y} ${MTW[m]} – ${MTW[(m+5)%12]}`;
+}
+
+// ── 主渲染 ────────────────────────────────────────────
+function render() {
+  renderLabel();
+  const root = document.getElementById('cal-root');
+  if (currentView==='day')   renderDay(root);
+  else if (currentView==='week')  renderWeek(root);
+  else if (currentView==='month') renderMonth(root);
+  else                             renderHalf(root);
+}
+
+// ── 日檢視 ────────────────────────────────────────────
+function renderDay(root) {
+  const key = dateKey(currentDate);
+  const dc = filteredClasses()
+    .filter(c => c.start.slice(0,10) === key)
+    .sort((a,b) => a.start.localeCompare(b.start));
+
+  if (!dc.length) {
+    root.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>今天沒有課程</div>';
+    return;
+  }
+
+  let html = '<div class="day-list">';
+  dc.forEach(c => {
+    const co = getCoach(c.coachId);
+    const isMine = String(c.coachId) === String(currentUser.id);
+    const conflict = hasConflict(c);
+    html += `<div class="day-card${conflict?' conflict':''}${isMine?' mine':''}" onclick="showDetail('${c.id}')">
+      <div class="avatar" style="background:${co.bg};color:${co.tc}">${co.abbr}</div>
+      <div class="card-body">
+        <div class="card-title">${c.name}</div>
+        <div class="card-meta">
+          <span>${co.name}</span>
+          ${locTagHTML(c)}
+          <span class="seq-badge">#${c.seq}</span>
+          ${conflict ? '<span class="conflict-tag">⚠ 衝突</span>' : ''}
+        </div>
+      </div>
+      <div class="time-col">${c.start.slice(11,16)}<br><span style="font-size:11px">– ${c.end.slice(11,16)}</span></div>
+    </div>`;
+  });
+  html += '</div>';
+  root.innerHTML = html;
+}
+
+// ── 週檢視 ────────────────────────────────────────────
+function renderWeek(root) {
+  const mon = mondayOf(currentDate);
+  const today = new Date();
+  const HOURS = Array.from({length:13},(_,i)=>i+7);
+  const SLOT = 48;
+
+  let html = '<div class="week-wrap"><div class="week-head-row"><div class="week-head-cell" style="border-right:1px solid #e8e8e0"></div>';
+  for (let d=0;d<7;d++) {
+    const day = new Date(mon); day.setDate(mon.getDate()+d);
+    const isTd = day.toDateString()===today.toDateString();
+    html += `<div class="week-head-cell"><div class="week-day-name">${DTW[day.getDay()]}</div><div class="week-day-num${isTd?' today':''}">${day.getDate()}</div></div>`;
+  }
+  html += '</div><div class="week-body-scroll"><div class="week-body-grid" id="wbg">';
+  HOURS.forEach(h => {
+    html += `<div class="hour-label">${h}:00</div>`;
+    for (let d=0;d<7;d++) html += `<div class="wcol" data-d="${d}" data-h="${h}"></div>`;
+  });
+  html += '</div></div></div>';
+  root.innerHTML = html;
+
+  const wbg = document.getElementById('wbg');
+  filteredClasses().forEach(c => {
+    const day = new Date(c.start.slice(0,10));
+    const diff = Math.round((day-mon)/86400000);
+    if (diff<0||diff>6) return;
+    const sh=parseInt(c.start.slice(11,13)), sm=parseInt(c.start.slice(14,16));
+    const eh=parseInt(c.end.slice(11,13)),   em=parseInt(c.end.slice(14,16));
+    const top = (sh-7)*SLOT + sm*(SLOT/60);
+    const height = Math.max(((eh-sh)*60+(em-sm))*(SLOT/60), 22);
+    const co = getCoach(c.coachId);
+    const cols = wbg.querySelectorAll(`.wcol[data-d="${diff}"]`);
+    const idx = sh-7; if(idx<0||idx>=cols.length) return;
+    const ev = document.createElement('div');
+    ev.className = 'week-event';
+    ev.style.cssText = `background:${co.color};top:${top}px;height:${height}px`;
+    ev.textContent = c.name;
+    ev.onclick = () => showDetail(c.id);
+    cols[idx].appendChild(ev);
+  });
+}
+
+// ── 月檢視 ────────────────────────────────────────────
+function renderMonth(root) {
+  const y=currentDate.getFullYear(), m=currentDate.getMonth();
+  const dim=new Date(y,m+1,0).getDate(), fd=new Date(y,m,1).getDay();
+  const today=new Date();
+  let html='<div class="month-grid">';
+  DTW.forEach(d=>html+=`<div class="month-head">${d}</div>`);
+  const total=Math.ceil((fd+dim)/7)*7;
+  for(let i=0;i<total;i++){
+    const col=i-fd+1, cur=col>=1&&col<=dim;
+    const dStr=cur?`${y}-${pad(m+1)}-${pad(col)}`:'';
+    const dc=dStr?filteredClasses().filter(c=>c.start.slice(0,10)===dStr):[];
+    const isTd=cur&&today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===col;
+    html+=`<div class="month-cell${cur?'':' other'}">`;
+    if(cur){
+      html+=isTd?`<div class="day-num today">${col}</div>`:`<div class="day-num">${col}</div>`;
+      dc.slice(0,3).forEach(c=>{
+        html+=`<div class="month-pill" style="background:${getCoach(c.coachId).color}" onclick="showDetail('${c.id}')">${c.name}</div>`;
+      });
+      if(dc.length>3) html+=`<div class="month-more">+${dc.length-3} 堂</div>`;
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  root.innerHTML=html;
+}
+
+// ── 半年檢視 ──────────────────────────────────────────
+function renderHalf(root) {
+  const y=currentDate.getFullYear(), sm=currentDate.getMonth();
+  const today=new Date();
+  let html='<div class="half-grid">';
+  for(let mi=0;mi<6;mi++){
+    const mY=sm+mi>=12?y+1:y, mM=(sm+mi)%12;
+    const dim=new Date(mY,mM+1,0).getDate(), fd=new Date(mY,mM,1).getDay();
+    html+=`<div><div class="mini-month-title">${mY} ${MTW[mM]}</div><table class="mini-cal"><thead><tr>`;
+    DTW.forEach(d=>html+=`<th>${d}</th>`);
+    html+='</tr></thead><tbody><tr>';
+    for(let i=0;i<fd;i++) html+='<td></td>';
+    let dow=fd;
+    for(let day=1;day<=dim;day++){
+      const dStr=`${mY}-${pad(mM+1)}-${pad(day)}`;
+      const dc=filteredClasses().filter(c=>c.start.slice(0,10)===dStr);
+      const isTd=today.getFullYear()===mY&&today.getMonth()===mM&&today.getDate()===day;
+      const dots=dc.slice(0,3).map(c=>`<span class="dot" style="background:${getCoach(c.coachId).color}"></span>`).join('');
+      html+=`<td class="${dc.length?'has-class':''}${isTd?' today-cell':''}" onclick="jumpDay(${mY},${mM},${day})">${day}${dots?`<div class="dot-row">${dots}</div>`:''}</td>`;
+      dow++; if(dow===7&&day<dim){html+='</tr><tr>';dow=0;}
+    }
+    while(dow%7!==0){html+='<td></td>';dow++;}
+    html+='</tr></tbody></table></div>';
+  }
+  html+='</div>';
+  root.innerHTML=html;
+}
+
+function jumpDay(y,m,d){currentDate=new Date(y,m,d);switchView('day');}
+
+// ── 新增/編輯 Modal ───────────────────────────────────
+function openAddModal(prefillId) {
+  editingId = prefillId || null;
+  const isEdit = !!editingId;
+  document.getElementById('form-title').textContent = isEdit ? '編輯課程' : '新增課程';
+  document.getElementById('delete-btn').style.display = isEdit ? 'block' : 'none';
+
+  // 教練選單：管理員可選所有，教練只能選自己
+  const sel = document.getElementById('f-coach');
+  if (currentUser.role === 'admin') {
+    sel.innerHTML = coaches.map(c=>`<option value="${c.id}">${c.abbr} — ${c.name}</option>`).join('');
+    sel.disabled = false;
+  } else {
+    sel.innerHTML = `<option value="${currentUser.id}">${currentUser.abbr} — ${currentUser.name}</option>`;
+    sel.disabled = true;
+  }
+
+  if (isEdit) {
+    const c = classes.find(x=>String(x.id)===String(editingId));
+    if (!c) return;
+    document.getElementById('f-name').value = c.name;
+    sel.value = c.coachId;
+    setLocType(c.locType);
+    if (c.locType==='room') selectedRoom=c.location;
+    if (c.locType==='field') document.getElementById('f-location').value=c.location;
+    document.getElementById('f-start').value = c.start;
+    document.getElementById('f-end').value   = c.end;
+    document.getElementById('f-students').value = c.students||'';
+  } else {
+    document.getElementById('f-name').value = '';
+    document.getElementById('f-students').value = '';
+    document.getElementById('f-location').value = '';
+    selectedRoom = '2f-front';
+    setLocType('room');
+    const now = new Date(); now.setMinutes(0,0,0);
+    const end = new Date(now); end.setHours(end.getHours()+1);
+    document.getElementById('f-start').value = fmtDT(now);
+    document.getElementById('f-end').value   = fmtDT(end);
+  }
+  buildRoomPicker();
+  document.getElementById('warn-box').style.display = 'none';
+  document.getElementById('form-modal').classList.add('open');
+}
+
+function closeFormModal() {
+  document.getElementById('form-modal').classList.remove('open');
+}
+
+function setLocType(t) {
+  currentLocType = t;
+  document.querySelectorAll('#form-modal .lt-btn').forEach((b,i) => {
+    b.className = 'lt-btn' + (['room','field','none'][i]===t ? ' active' : '');
+  });
+  document.getElementById('room-picker').style.display  = t==='room'  ? 'block' : 'none';
+  document.getElementById('field-picker').style.display = t==='field' ? 'block' : 'none';
+}
+
+function buildRoomPicker() {
+  const el = document.getElementById('room-options');
+  el.innerHTML = '';
+  ROOMS.forEach(r => {
+    const isSelected = selectedRoom === r.id;
+    const lbl = document.createElement('label');
+    lbl.className = 'room-option' + (isSelected ? ' selected' : '');
+    const cls = r.floor==='2f' ? 'loc-2f' : 'loc-b1';
+    lbl.innerHTML = `<input type="radio" name="room-r" value="${r.id}" ${isSelected?'checked':''} style="accent-color:#0F6E56"><span class="loc-tag ${cls}">${r.label}</span>`;
+    lbl.querySelector('input').addEventListener('change', () => {
+      selectedRoom = r.id;
+      el.querySelectorAll('label').forEach(l=>l.classList.remove('selected'));
+      lbl.classList.add('selected');
+    });
+    el.appendChild(lbl);
+  });
+}
+
+async function saveClass() {
+  const name     = document.getElementById('f-name').value.trim();
+  const coachId  = document.getElementById('f-coach').value;
+  const start    = document.getElementById('f-start').value;
+  const end      = document.getElementById('f-end').value;
+  const students = document.getElementById('f-students').value;
+  let location   = '';
+  if (currentLocType==='room')  location = selectedRoom;
+  if (currentLocType==='field') location = document.getElementById('f-location').value.trim();
+  if (!name||!start||!end) { showToast('請填寫課程名稱及時間'); return; }
+  if (start >= end) { showToast('結束時間必須晚於開始時間'); return; }
+
+  const cls = { id: editingId||undefined, name, coachId, locType:currentLocType, location, start, end, students };
+
+  // 衝突檢查
+  const warns = [];
+  classes.forEach(o => {
+    if (String(o.id)===String(editingId)) return;
+    if (start < o.end && end > o.start) {
+      if (String(o.coachId)===String(coachId)) warns.push(`${getCoach(coachId).name} 教練已有「${o.name}」`);
+      if (currentLocType==='room' && o.locType==='room' && o.location===location) {
+        warns.push(`${ROOM_MAP[location]?.label||location} 已有「${o.name}」`);
+      }
+    }
+  });
+  const wb = document.getElementById('warn-box');
+  if (warns.length) { wb.style.display='block'; document.getElementById('warn-msg').textContent=warns.join('；'); }
+  else wb.style.display='none';
+
+  const action = editingId ? 'updateClass' : 'addClass';
+  const res = await api(action, { cls });
+  if (res.success || res.id) {
+    showToast(editingId ? '課程已更新' : '課程已新增');
+    closeFormModal();
+    closeDetailModal();
+    await loadClasses();
+  } else {
+    showToast(res.error || '儲存失敗');
+  }
+}
+
+async function deleteClass() {
+  if (!editingId) return;
+  if (!confirm('確定要刪除這堂課程嗎？')) return;
+  const res = await api('cancelClass', { id: editingId });
+  if (res.success) {
+    showToast('課程已刪除');
+    closeFormModal();
+    closeDetailModal();
+    await loadClasses();
+  } else {
+    showToast(res.error || '刪除失敗');
+  }
+}
+
+// ── 詳情 Modal ───────────────────────────────────────
+function showDetail(id) {
+  const c = classes.find(x=>String(x.id)===String(id));
+  if (!c) return;
+  const co = getCoach(c.coachId);
+  const isMine = String(c.coachId)===String(currentUser.id);
+  const canEdit = currentUser.role==='admin' || isMine;
+  const conflict = hasConflict(c);
+
+  document.getElementById('d-avatar').style.cssText = `background:${co.bg};color:${co.tc};width:42px;height:42px;font-size:13px`;
+  document.getElementById('d-avatar').textContent = co.abbr;
+  document.getElementById('d-name').textContent = c.name;
+  document.getElementById('d-sub').textContent = `${co.name} 教練  ·  登記順序 #${c.seq}`;
+
+  let locRow = '';
+  if (c.locType==='room') { const r=ROOM_MAP[c.location]; locRow=`<div class="detail-row"><span class="detail-icon">🏢</span><span>${r?r.label:c.location}</span></div>`; }
+  else if (c.locType==='field') locRow=`<div class="detail-row"><span class="detail-icon">📍</span><span>外勤：${c.location||'未填寫'}</span></div>`;
+  else locRow=`<div class="detail-row"><span class="detail-icon">—</span><span style="color:#bbb">無固定地點</span></div>`;
+
+  document.getElementById('d-body').innerHTML = `
+    <div class="detail-row"><span class="detail-icon">🕐</span><span>${c.start.replace('T',' ')} – ${c.end.slice(11,16)}</span></div>
+    ${locRow}
+    ${conflict ? `<div class="detail-row"><span class="detail-icon">⚠️</span><span style="color:#b7660a">此時段有排課衝突</span></div>` : ''}
+  `;
+
+  const studs = (c.students||'').split(',').map(s=>s.trim()).filter(Boolean);
+  document.getElementById('d-students').innerHTML = studs.length
+    ? `<div style="font-size:11px;color:#bbb;margin-bottom:6px">已報名學員（${studs.length}人）</div>
+       <div style="display:flex;flex-wrap:wrap;gap:6px">${studs.map(s=>`<span class="student-tag">${s}</span>`).join('')}</div>`
+    : '<div style="font-size:12px;color:#bbb">尚無報名學員</div>';
+
+  const acts = document.getElementById('d-actions');
+  acts.innerHTML = '';
+  if (canEdit) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-save';
+    btn.textContent = '編輯課程';
+    btn.onclick = () => { closeDetailModal(); openAddModal(c.id); };
+    acts.appendChild(btn);
+  }
+
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function closeDetailModal() {
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
+// 點背景關閉 modal
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open'); });
+});
+
+// ── Toast ────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
