@@ -566,7 +566,8 @@ function loginAs(user) {
   }
   coachFilter = new Set(coaches.map(c=>String(c.id)));
   renderFilters();
-  loadClasses(); // 從 Google Sheets 載入課程
+  loadClasses();  // 從 Google Sheets 載入課程
+  loadDuty();     // 從 Google Sheets 載入值班
 }
 function doLogout() {
   me = null;
@@ -898,10 +899,25 @@ function buildDutyGrid(elId,selSet){
     el.appendChild(btn);
   });
 }
-function saveDuty(){
+async function loadDuty() {
+  try {
+    const data = await apiCall({ action:'getDuty' });
+    if (data.duty) { dutyData = data.duty; render(); }
+  } catch(e) { console.warn('loadDuty failed', e); }
+}
+
+async function saveDuty(){
   if(!dutyEditDate){showToast('請選擇日期');return;}
-  dutyData[dutyEditDate]={xueyuan:[...dutySelX].map(Number),guohua:[...dutySelG].map(Number)};
-  closeDutyModal(); render(); showToast('值班已儲存');
+  const xueyuan = [...dutySelX].join(',');
+  const guohua  = [...dutySelG].join(',');
+  // 先更新本地
+  dutyData[dutyEditDate]={ xueyuan:[...dutySelX].map(Number), guohua:[...dutySelG].map(Number) };
+  closeDutyModal(); render();
+  // 再同步到 Google Sheets
+  try {
+    await apiCall({ action:'saveDuty', date:dutyEditDate, xueyuan, guohua });
+    showToast('值班已儲存並同步');
+  } catch(e) { showToast('本地已儲存，但同步失敗'); }
 }
 
 // ════════════════════════════════════════════
