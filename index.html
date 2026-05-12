@@ -359,7 +359,7 @@ const LOGO = 'YM_HOPE_transparent.png'; // 與 HTML 同資料夾放置圖檔
 // ════════════════════════════════════════════
 //  Google Apps Script API URL（已填入）
 // ════════════════════════════════════════════
-const API_URL = 'https://script.google.com/macros/library/d/17P991do3kV7NSNfFWDUCijC5XAMQ_yc8Ox0wCUPg9Ut2qW4GeVe86elA/2';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyQaU3RiZlNgxvR1EiMhkavmATlaq16-Wl7Hjdc4IRXOOrSlVT_p4vKO-Jg42mUgmejOA/exec';
 
 // ════════════════════════════════════════════
 //  教室候補邏輯
@@ -495,6 +495,15 @@ function renderDutyBar(ds) {
 // ════════════════════════════════════════════
 //  登入 / 登出
 // ════════════════════════════════════════════
+// ── API 呼叫（用 GET + query string，避免 CORS preflight）──────
+async function apiCall(params) {
+  const qs = Object.entries(params)
+    .map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(typeof v==='object'?JSON.stringify(v):v)}`)
+    .join('&');
+  const res = await fetch(`${API_URL}?${qs}`);
+  return res.json();
+}
+
 async function doLogin() {
   const u = document.getElementById('lu').value.trim();
   const p = document.getElementById('lp').value;
@@ -502,17 +511,12 @@ async function doLogin() {
   const btn = document.querySelector('.btn-primary');
   btn.disabled = true; btn.textContent = '登入中...';
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', username: u, password: p })
-    });
-    const data = await res.json();
+    const data = await apiCall({ action:'login', username:u, password:p });
     if (data.success) {
-      // 同步教練清單
       await loadCoaches();
       loginAs({ ...data.coach, role: data.coach.role });
     } else {
+      document.getElementById('lerr').textContent = data.error || '帳號或密碼錯誤';
       document.getElementById('lerr').style.display = 'block';
     }
   } catch (e) {
@@ -526,12 +530,7 @@ async function doLogin() {
 
 async function loadCoaches() {
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getCoaches' })
-    });
-    const data = await res.json();
+    const data = await apiCall({ action:'getCoaches' });
     if (data.coaches && data.coaches.length) {
       coaches = data.coaches.map(c => ({
         id: Number(c.id), name: c.name, abbr: c.abbr,
@@ -543,13 +542,7 @@ async function loadCoaches() {
 
 async function loadClasses() {
   try {
-    const token = me ? btoa(JSON.stringify({ id: me.id, name: me.name, role: me.role })) : '';
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getClasses', token })
-    });
-    const data = await res.json();
+    const data = await apiCall({ action:'getClasses' });
     if (data.classes) {
       classes = data.classes.map(c => ({ ...c, coachId: Number(c.coachId), seq: Number(c.seq) }));
       nextSeq = classes.reduce((m, c) => Math.max(m, c.seq), 0);
@@ -860,15 +853,10 @@ async function saveClass() {
   const wb=document.getElementById('warn-box');
   if(warns.length){wb.style.display='block';document.getElementById('warn-msg').textContent=warns.join('；');}
   else wb.style.display='none';
-  const token = btoa(JSON.stringify({ id: me.id, name: me.name, role: me.role }));
-  const cls = { id: editId||undefined, name, coachId, locType:curLT, location, start, end, students };
+  const cls = { id:editId||undefined, name, coachId, locType:curLT, location, start, end, students };
   const action = editId ? 'updateClass' : 'addClass';
   try {
-    const res = await fetch(API_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ action, token, cls })
-    });
-    const data = await res.json();
+    const data = await apiCall({ action, cls });
     if (data.success || data.id) {
       showToast(editId ? '課程已更新' : '課程已新增');
       closeForm(); closeDet();
@@ -879,13 +867,8 @@ async function saveClass() {
 async function delClass() {
   if(!editId) return;
   if(!confirm('確定要刪除這堂課程嗎？')) return;
-  const token = btoa(JSON.stringify({ id: me.id, name: me.name, role: me.role }));
   try {
-    const res = await fetch(API_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ action:'cancelClass', token, id: editId })
-    });
-    const data = await res.json();
+    const data = await apiCall({ action:'cancelClass', id: editId });
     if (data.success) {
       showToast('課程已刪除'); closeForm(); closeDet();
       await loadClasses();
