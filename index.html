@@ -987,10 +987,19 @@ let autoRefreshTimer = null;
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(async () => {
-    if (!me) return; // 未登入不執行
+    if (!me) return;
     try {
-      await loadDuty();
-      await loadClasses();
+      // 從 Sheets 拉最新值班和課程，直接覆蓋本地資料
+      const [dutyRes, classRes] = await Promise.all([
+        apiCall({ action:'getDuty' }),
+        apiCall({ action:'getClasses' })
+      ]);
+      if (dutyRes.duty) dutyData = dutyRes.duty;
+      if (classRes.classes) {
+        classes = classRes.classes.map(c => ({ ...c, coachId: Number(c.coachId), seq: Number(c.seq) }));
+        nextSeq = classes.reduce((m,c) => Math.max(m, c.seq), 0);
+      }
+      render();
     } catch(e) { console.warn('auto refresh failed', e); }
   }, 30000); // 每 30 秒
 }
