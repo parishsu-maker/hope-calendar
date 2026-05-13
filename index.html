@@ -287,9 +287,23 @@ textarea{resize:none;height:54px}
     </div>
     <div class="standby-info" id="standby-info">⚠️ <span id="standby-msg"></span></div>
     <div class="g2">
-      <div class="fr"><label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">開始時間</label><input type="datetime-local" id="f-start" onchange="checkStandby()"></div>
-      <div class="fr"><label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">結束時間</label><input type="datetime-local" id="f-end" onchange="checkStandby()"></div>
+      <div class="fr">
+        <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">開始時間</label>
+        <div style="display:flex;gap:5px">
+          <input type="date" id="f-start-date" style="flex:1" onchange="syncDateTime();checkStandby()">
+          <select id="f-start-time" style="width:90px;flex-shrink:0" onchange="syncDateTime();checkStandby()"></select>
+        </div>
+      </div>
+      <div class="fr">
+        <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">結束時間</label>
+        <div style="display:flex;gap:5px">
+          <input type="date" id="f-end-date" style="flex:1" onchange="syncDateTime()">
+          <select id="f-end-time" style="width:90px;flex-shrink:0" onchange="syncDateTime()"></select>
+        </div>
+      </div>
     </div>
+    <input type="hidden" id="f-start">
+    <input type="hidden" id="f-end">
     <div class="fr"><label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">上課學員（逗號分隔）</label><textarea id="f-students" placeholder="王小明, 陳美麗"></textarea></div>
     <div class="warn-box" id="warn-box">⚠️ <span id="warn-msg"></span></div>
     <div class="mf">
@@ -865,6 +879,51 @@ function closeDet(){ document.getElementById('det-modal').classList.remove('open
 // ════════════════════════════════════════════
 //  新增 / 編輯課程
 // ════════════════════════════════════════════
+// ── 時間下拉選單（整點和30分）────────────────────────────────────
+function buildTimeOptions() {
+  const times = [];
+  for (let h = 7; h <= 22; h++) {
+    times.push(`${String(h).padStart(2,'0')}:00`);
+    if (h < 22) times.push(`${String(h).padStart(2,'0')}:30`);
+  }
+  return times;
+}
+
+function initTimeSelects() {
+  const times = buildTimeOptions();
+  ['f-start-time','f-end-time'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = times.map(t => `<option value="${t}">${t}</option>`).join('');
+  });
+}
+
+function syncDateTime() {
+  const sd = document.getElementById('f-start-date').value;
+  const st = document.getElementById('f-start-time').value;
+  const ed = document.getElementById('f-end-date').value;
+  const et = document.getElementById('f-end-time').value;
+  if (sd && st) document.getElementById('f-start').value = `${sd}T${st}`;
+  if (ed && et) document.getElementById('f-end').value   = `${ed}T${et}`;
+}
+
+function setTimeFromValue(val, dateId, timeId) {
+  if (!val) return;
+  // val 格式：2026-05-14T14:00
+  const parts = val.split('T');
+  if (parts.length === 2) {
+    document.getElementById(dateId).value = parts[0];
+    // 找最接近的整點或30分
+    const [h, m] = parts[1].split(':').map(Number);
+    const roundedM = m >= 15 && m < 45 ? '30' : '00';
+    const roundedH = (m >= 45 ? h + 1 : h) % 24;
+    const timeStr = `${String(roundedH).padStart(2,'0')}:${roundedM}`;
+    const sel = document.getElementById(timeId);
+    // 找最接近的選項
+    const opt = [...sel.options].find(o => o.value === timeStr) || sel.options[0];
+    sel.value = opt.value;
+  }
+}
+
 function openAdd(){ editId=null; openForm(); }
 function openEdit(id){ editId=id; openForm(); }
 function openForm() {
@@ -879,17 +938,39 @@ function openForm() {
     document.getElementById('f-name').value=c.name; sel.value=c.coachId;
     setLT(c.locType); if(c.locType==='room') selRoom=c.location;
     if(c.locType==='field') document.getElementById('f-loc').value=c.location;
-    document.getElementById('f-start').value=c.start; document.getElementById('f-end').value=c.end;
+    // 時間由 initTimeSelects + setTimeFromValue 處理
     document.getElementById('f-students').value=c.students||'';
   } else {
     document.getElementById('f-name').value=''; document.getElementById('f-students').value='';
     document.getElementById('f-loc').value=''; selRoom='2f-front'; setLT('room');
-    const now=new Date(); now.setMinutes(0,0,0);
-    const end=new Date(now); end.setHours(end.getHours()+1);
-    document.getElementById('f-start').value=fmtDT(now);
-    document.getElementById('f-end').value=fmtDT(end);
   }
   buildRoomOpts();
+  initTimeSelects();
+  if(isEdit){
+    const c=classes.find(x=>String(x.id)===String(editId));
+    if(c){
+      setTimeFromValue(c.start,'f-start-date','f-start-time');
+      setTimeFromValue(c.end,'f-end-date','f-end-time');
+      syncDateTime();
+    }
+  } else {
+    const now=new Date();
+    const todayStr=fmtDate(now);
+    // 預設開始時間：下一個整點或30分
+    const h=now.getHours(), m=now.getMinutes();
+    let nextH=h, nextM='00';
+    if(m>=30){nextH=h+1; nextM='00';} else {nextM='30';}
+    if(nextH>22) nextH=22;
+    const startTime=`${String(nextH).padStart(2,'0')}:${nextM}`;
+    document.getElementById('f-start-date').value=todayStr;
+    document.getElementById('f-start-time').value=startTime;
+    // 結束時間：開始+1小時
+    let endH=nextH+1; if(endH>22) endH=22;
+    const endTime=`${String(endH).padStart(2,'0')}:${nextM}`;
+    document.getElementById('f-end-date').value=todayStr;
+    document.getElementById('f-end-time').value=endTime;
+    syncDateTime();
+  }
   document.getElementById('warn-box').style.display='none';
   document.getElementById('standby-info').style.display='none';
   checkStandby();
@@ -928,6 +1009,9 @@ function checkStandby() {
   } else { si.style.display='none'; }
 }
 async function saveClass() {
+  const saveBtn = document.querySelector('#form-modal .btn-s');
+  if (saveBtn.disabled) return; // 防止連點
+  saveBtn.disabled = true; saveBtn.textContent = '儲存中...';
   const name=document.getElementById('f-name').value.trim();
   const coachId=parseInt(document.getElementById('f-coach').value);
   const start=document.getElementById('f-start').value, end=document.getElementById('f-end').value;
@@ -952,6 +1036,7 @@ async function saveClass() {
       await loadClasses();
     } else { showToast(data.error || '儲存失敗'); }
   } catch(e){ showToast('連線失敗，請稍後再試'); }
+  finally { saveBtn.disabled = false; saveBtn.textContent = '儲存'; }
 }
 async function delClass() {
   if(!editId) return;
