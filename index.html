@@ -740,7 +740,7 @@ function render() {
 // ════════════════════════════════════════════
 function renderDay(root) {
   const key = fmtDate(curDate);
-  const dc  = filtered().filter(c=>c.start.slice(0,10)===key).sort((a,b)=>a.start.localeCompare(b.start));
+  const dc  = filtered().filter(c=>c.start.replace(' ','T').slice(0,10)===key).sort((a,b)=>a.start.localeCompare(b.start));
   if (!dc.length) { root.innerHTML='<div class="empty-state">📭<br>今天沒有課程</div>'; return; }
   let html = '<div class="day-list">';
   dc.forEach(c => {
@@ -752,7 +752,7 @@ function renderDay(root) {
         <div class="card-title">${c.name}</div>
         <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}<span class="seq-badge">#${c.seq}</span>${sb?'<span class="standby-tag">⚠ 候補</span>':''}</div>
       </div>
-      <div class="time-col">${c.start.slice(11,16)} – ${c.end.slice(11,16)}</div>
+      <div class="time-col">${c.start.replace(' ','T').split('T')[1]?.slice(0,5)||''} – ${c.end.replace(' ','T').split('T')[1]?.slice(0,5)||''}</div>
     </div>`;
   });
   html += '</div>'; root.innerHTML = html;
@@ -776,10 +776,21 @@ function renderWeek(root) {
   html+='</div></div></div>'; root.innerHTML=html;
   const wbg=document.getElementById('wbg');
   filtered().forEach(c=>{
-    const day=new Date(c.start.slice(0,10)), diff=Math.round((day-mon)/86400000);
+    // 解析時間，支援 "2026-05-14T14:00" 和 "2026-05-14 14:00" 兩種格式
+    const startStr = c.start.replace(' ','T');
+    const endStr   = c.end.replace(' ','T');
+    const startParts = startStr.split('T');
+    const endParts   = endStr.split('T');
+    if(startParts.length < 2 || endParts.length < 2) return;
+
+    const day=new Date(startParts[0]), diff=Math.round((day-mon)/86400000);
     if(diff<0||diff>6) return;
-    const sh=parseInt(c.start.slice(11,13)), sm=parseInt(c.start.slice(14,16));
-    const eh=parseInt(c.end.slice(11,13)),   em=parseInt(c.end.slice(14,16));
+
+    const [shStr,smStr] = startParts[1].split(':');
+    const [ehStr,emStr] = endParts[1].split(':');
+    const sh=parseInt(shStr)||0, sm=parseInt(smStr)||0;
+    const eh=parseInt(ehStr)||0, em=parseInt(emStr)||0;
+
     const top=(sh-7)*SLOT+sm*(SLOT/60), height=Math.max(((eh-sh)*60+(em-sm))*(SLOT/60),22);
     const co=getCoach(c.coachId), sb=isStandby(c);
     const cols=wbg.querySelectorAll(`.wcol[data-d="${diff}"]`);
@@ -802,7 +813,7 @@ function renderMonth(root) {
   for(let i=0;i<total;i++){
     const col=i-fd+1, cur=col>=1&&col<=dim;
     const dStr=cur?`${y}-${pad(m+1)}-${pad(col)}`:'';
-    const dc=dStr?filtered().filter(c=>c.start.slice(0,10)===dStr):[];
+    const dc=dStr?filtered().filter(c=>c.start.replace(' ','T').slice(0,10)===dStr):[];
     const duty=dStr?dutyForDate(dStr):{xueyuan:[],guohua:[]};
     const isTd=cur&&today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===col;
     html+=`<div class="mc${cur?'':' om'}">`;
@@ -832,7 +843,7 @@ function renderHalf(root) {
     let dow=fd;
     for(let day=1;day<=dim;day++){
       const dStr=`${mY}-${pad(mM+1)}-${pad(day)}`;
-      const dc=filtered().filter(c=>c.start.slice(0,10)===dStr);
+      const dc=filtered().filter(c=>c.start.replace(' ','T').slice(0,10)===dStr);
       const duty=dutyForDate(dStr), hasDuty=duty.xueyuan.length||duty.guohua.length;
       const isTd=today.getFullYear()===mY&&today.getMonth()===mM&&today.getDate()===day;
       const dots=dc.slice(0,2).map(c=>`<span class="dot" style="background:${isStandby(c)?'#E53935':getCoach(c.coachId).color}"></span>`).join('');
@@ -865,7 +876,8 @@ function showDet(id) {
     locRow=`<div class="det-row"><span style="font-size:14px;width:18px;flex-shrink:0">📍</span><span>外勤：${c.location||'未填寫'}</span></div>`;
   else
     locRow=`<div class="det-row"><span style="color:#bbb;width:18px;flex-shrink:0">—</span><span style="color:#bbb">無固定地點</span></div>`;
-  document.getElementById('d-body').innerHTML=`<div class="det-row"><span style="font-size:14px;width:18px;flex-shrink:0">🕐</span><span>${c.start.replace('T',' ')} – ${c.end.slice(11,16)}</span></div>${locRow}`;
+  const sTime=c.start.replace(' ','T'); const eTime=c.end.replace(' ','T');
+  document.getElementById('d-body').innerHTML=`<div class="det-row"><span style="font-size:14px;width:18px;flex-shrink:0">🕐</span><span>${sTime.replace('T',' ')} – ${eTime.split('T')[1]?.slice(0,5)||''}</span></div>${locRow}`;
   const studs=(c.students||'').split(',').map(s=>s.trim()).filter(Boolean);
   document.getElementById('d-studs').innerHTML=studs.length
     ?`<div style="font-size:11px;color:#bbb;margin-bottom:6px">上課學員（${studs.length}人）</div><div style="display:flex;flex-wrap:wrap;gap:6px">${studs.map(s=>`<span class="stag">${s}</span>`).join('')}</div>`
