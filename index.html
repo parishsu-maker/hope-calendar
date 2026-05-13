@@ -690,12 +690,21 @@ function renderLeaveBar(ds) {
 //  登入 / 登出
 // ════════════════════════════════════════════
 // ── API 呼叫（用 GET + query string，避免 CORS preflight）──────
-async function apiCall(params) {
+async function apiCall(params, timeoutMs=10000) {
   const qs = Object.entries(params)
     .map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(typeof v==='object'?JSON.stringify(v):v)}`)
     .join('&');
-  const res = await fetch(`${API_URL}?${qs}`);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API_URL}?${qs}`, { signal: controller.signal });
+    clearTimeout(timer);
+    return res.json();
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
+    throw e;
+  }
 }
 
 async function doLogin() {
