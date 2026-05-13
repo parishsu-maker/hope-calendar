@@ -432,6 +432,16 @@ const FLOOR_LABEL = {
   'pg-front':'推桿前半','pg-back':'推桿後半',
 };
 
+// 計算課程在同時段、同教室的登記順序（用全域 seq 判斷先後）
+function getSameSlotRank(cls, allClasses) {
+  if (cls.locType !== 'room') return null;
+  const same = allClasses
+    .filter(o => o.locType==='room' && o.location===cls.location && cls.start < o.end && cls.end > o.start)
+    .sort((a,b) => a.seq - b.seq);
+  const idx = same.findIndex(o => String(o.id)===String(cls.id));
+  return idx + 1; // 1-based
+}
+
 function getRoomStatus(cls, allClasses) {
   if (cls.locType !== 'room') return { isStandby:false, label: cls.location ? (ROOM_LABEL[cls.location]||cls.location) : '' };
   const loc = cls.location;
@@ -770,7 +780,7 @@ function renderDay(root) {
       <div class="avatar" style="background:${co.color}">${co.abbr}</div>
       <div class="card-body">
         <div class="card-title">${c.name}</div>
-        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}<span class="seq-badge">#${c.seq}</span>${sb?'<span class="standby-tag">⚠ 候補</span>':''}</div>
+        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}<span class="seq-badge">#${getSameSlotRank(c,classes)||c.seq}</span>${sb?'<span class="standby-tag">⚠ 候補</span>':''}</div>
       </div>
       <div class="time-col">${c.start.replace(' ','T').split('T')[1]?.slice(0,5)||''} – ${c.end.replace(' ','T').split('T')[1]?.slice(0,5)||''}</div>
     </div>`;
@@ -889,7 +899,8 @@ function showDet(id) {
   document.getElementById('d-av').style.cssText=`background:${co.color};color:#fff;width:42px;height:42px;font-size:13px;font-weight:600`;
   document.getElementById('d-av').textContent=co.abbr;
   document.getElementById('d-name').textContent=c.name;
-  document.getElementById('d-sub').textContent=`${co.name} · 登記順序 #${c.seq}`;
+  const slotRank = getSameSlotRank(c, classes) || c.seq;
+  document.getElementById('d-sub').textContent=`${co.name} · 同時段登記順序 #${slotRank}`;
   let locRow='';
   if(c.locType==='room'){
     locRow=`<div class="det-row"><span style="font-size:14px;width:18px;flex-shrink:0">🏢</span><span style="${sb?'color:#E53935;font-weight:500':''}">${st.label}${sb?` （候補第${st.standbyNum}位）`:''}</span></div>`;
