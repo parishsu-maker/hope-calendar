@@ -823,7 +823,7 @@ function renderDay(root) {
 // ════════════════════════════════════════════
 function renderWeek(root) {
   const mon=mondayOf(curDate), today=new Date();
-  const HOURS=Array.from({length:13},(_,i)=>i+7), SLOT=46;
+  const HOURS=Array.from({length:16},(_,i)=>i+7), SLOT=46; // 7:00~22:00
   let html='<div class="week-wrap"><div class="week-head-row"><div class="whc" style="border-right:1px solid #e4e0d8"></div>';
   for(let d=0;d<7;d++){const day=new Date(mon);day.setDate(mon.getDate()+d);const isTd=day.toDateString()===today.toDateString();html+=`<div class="whc"><div class="wdn">${DTW[day.getDay()]}</div><div class="wdd${isTd?' tw':''}">${day.getDate()}</div></div>`;}
   html+='</div><div class="week-duty-row"><div class="week-duty-cell" style="color:#666">值班</div>';
@@ -831,9 +831,19 @@ function renderWeek(root) {
     duty.xueyuan.forEach(id=>{const co=getCoach(id);chips+=`<span class="week-duty-chip" style="background:${co.color}">${co.abbr}學</span>`;});
     duty.guohua.forEach(id=>{const co=getCoach(id);chips+=`<span class="week-duty-chip" style="background:${co.color};opacity:.75">${co.abbr}國</span>`;});
     html+=`<div class="week-duty-cell">${chips}</div>`;}
-  html+='</div><div class="week-scroll"><div class="week-body" id="wbg">';
+  html+='</div>';
+  // 休假列
+  html+='<div class="week-duty-row" style="background:#C8DCF0"><div class="week-duty-cell" style="color:#5a7a9a">休假</div>';
+  for(let d=0;d<7;d++){const day=new Date(mon);day.setDate(mon.getDate()+d);const ids=leaveData[fmtDate(day)]||[];let chips='';
+    ids.forEach(id=>{const co=getCoach(id);chips+=`<span class="week-duty-chip" style="background:${co.color}">${co.abbr}</span>`;});
+    html+=`<div class="week-duty-cell" style="border-left:1px solid #b0cce0">${chips}</div>`;}
+  html+='</div>';
+  html+='<div class="week-scroll" id="week-scroll-el"><div class="week-body" id="wbg">';
   HOURS.forEach(h=>{html+=`<div class="hlabel">${h}:00</div>`;for(let d=0;d<7;d++) html+=`<div class="wcol" data-d="${d}" data-h="${h}"></div>`;});
   html+='</div></div></div>'; root.innerHTML=html;
+  // 自動捲到 9:00 位置
+  const scrollEl=document.getElementById('week-scroll-el');
+  if(scrollEl) scrollEl.scrollTop=(9-7)*SLOT;
   const wbg=document.getElementById('wbg');
   filtered().forEach(c=>{
     // 解析時間，支援 "2026-05-14T14:00" 和 "2026-05-14 14:00" 兩種格式
@@ -856,9 +866,18 @@ function renderWeek(root) {
     const height=Math.max(((eh-sh)*60+(em-sm))*(SLOT/60),22);
     const co=getCoach(c.coachId), sb=isStandby(c);
     const cols=wbg.querySelectorAll(`.wcol[data-d="${diff}"]`);
-    const idx=sh-7; if(idx<0||idx>=cols.length) return;
+    const idx=sh-7; if(idx<0||idx>=HOURS.length) return;
+    // 計算同一格有幾堂課，做並排顯示
+    const siblings = cols[idx].querySelectorAll('.we').length;
+    const w = siblings === 0 ? '100%' : '50%';
+    const left = siblings === 0 ? '1px' : '50%';
     const ev=document.createElement('div'); ev.className='we';
-    ev.style.cssText=`background:${sb?'#E53935':co.color};top:${top}px;height:${height}px`;
+    ev.style.cssText=`background:${sb?'#E53935':co.color};top:${top}px;height:${height}px;width:${w};left:${left};right:auto`;
+    // 已有的課程也縮成一半
+    if(siblings===1){
+      const prev=cols[idx].querySelector('.we');
+      if(prev){ prev.style.width='50%'; prev.style.right='auto'; }
+    }
     ev.textContent=c.name; ev.onclick=()=>showDet(c.id);
     cols[idx].appendChild(ev);
   });
