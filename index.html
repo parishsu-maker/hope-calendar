@@ -333,11 +333,11 @@ textarea{resize:none;height:54px}
       <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">選擇日期</label>
       <input type="date" id="duty-date-input" onchange="onDutyDateChange()">
     </div>
-    <div class="duty-loc-section">
+    <div class="duty-loc-section" id="duty-xueyuan-section">
       <div class="duty-loc-title"><span class="duty-loc-icon" style="background:#7BAE96"></span>學苑值班</div>
       <div class="duty-coach-grid" id="duty-xueyuan-grid"></div>
     </div>
-    <div class="duty-loc-section">
+    <div class="duty-loc-section" id="duty-guohua-section">
       <div class="duty-loc-title"><span class="duty-loc-icon" style="background:#8FB5C9"></span>國華球場值班</div>
       <div class="duty-coach-grid" id="duty-guohua-grid"></div>
     </div>
@@ -1029,7 +1029,14 @@ async function saveLeave() {
 // ════════════════════════════════════════════
 //  值班排班
 // ════════════════════════════════════════════
-function openDutyModal(){ document.getElementById('duty-date-input').value=fmtDate(curDate); onDutyDateChange(); document.getElementById('duty-modal').classList.add('open'); }
+function openDutyModal(){
+  document.getElementById('duty-date-input').value = fmtDate(curDate);
+  // 根據角色顯示/隱藏學苑和國華區塊
+  document.getElementById('duty-xueyuan-section').style.display = isXueyuan() ? 'block' : 'none';
+  document.getElementById('duty-guohua-section').style.display  = isGuohua()  ? 'block' : 'none';
+  onDutyDateChange();
+  document.getElementById('duty-modal').classList.add('open');
+}
 function closeDutyModal(){ document.getElementById('duty-modal').classList.remove('open'); }
 function onDutyDateChange(){
   const ds=document.getElementById('duty-date-input').value; if(!ds) return;
@@ -1057,10 +1064,15 @@ async function loadDuty() {
 
 async function saveDuty(){
   if(!dutyEditDate){showToast('請選擇日期');return;}
-  const xueyuan = [...dutySelX].join(',');
-  const guohua  = [...dutySelG].join(',');
+  // 根據角色決定要更新哪個區塊，不影響另一個
+  const existing = dutyData[dutyEditDate] || { xueyuan:[], guohua:[] };
+  const xueyuan = isXueyuan() ? [...dutySelX].join(',') : existing.xueyuan.join(',');
+  const guohua  = isGuohua()  ? [...dutySelG].join(',') : existing.guohua.join(',');
   // 先更新本地
-  dutyData[dutyEditDate]={ xueyuan:[...dutySelX].map(Number), guohua:[...dutySelG].map(Number) };
+  dutyData[dutyEditDate]={
+    xueyuan: isXueyuan() ? [...dutySelX].map(Number) : existing.xueyuan,
+    guohua:  isGuohua()  ? [...dutySelG].map(Number) : existing.guohua,
+  };
   closeDutyModal(); render();
   // 再同步到 Google Sheets
   try {
