@@ -1053,9 +1053,9 @@ function closeDet(){ document.getElementById('det-modal').classList.remove('open
 // ── 時間下拉選單（整點和30分）────────────────────────────────────
 function buildTimeOptions() {
   const times = [];
-  for (let h = 7; h <= 22; h++) {
+  for (let h = 6; h <= 24; h++) {
     times.push(`${String(h).padStart(2,'0')}:00`);
-    if (h < 22) times.push(`${String(h).padStart(2,'0')}:30`);
+    if (h < 24) times.push(`${String(h).padStart(2,'0')}:30`);
   }
   return times;
 }
