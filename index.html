@@ -1193,12 +1193,30 @@ function checkStandby() {
   const start=document.getElementById('f-start').value, end=document.getElementById('f-end').value;
   if(!start||!end){si.style.display='none';return;}
   const floor=ROOM_FLOOR[selRoom]; if(!floor){si.style.display='none';return;}
-  const existing=classes.filter(o=>String(o.id)!==String(editId)&&o.locType==='room'&&ROOM_FLOOR[o.location]===floor&&start<o.end&&end>o.start);
-  const slots=ROOM_SLOTS[floor];
-  if(existing.length>=slots.length){
-    const n=existing.length-slots.length+1;
+  // 計算同樓層、教室佔用時間重疊的課程數
+  const isBack = selRoom.endsWith('-back');
+  function addMin(dtStr, min) {
+    const parts = dtStr.replace(' ','T').split('T');
+    if(parts.length<2) return dtStr;
+    const [h,m2] = parts[1].split(':').map(Number);
+    const total = h*60+m2+min;
+    return `${parts[0]}T${String(Math.floor(total/60)%24).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+  }
+  const myOS = isBack ? addMin(end,-30) : start;
+  const myOE = isBack ? end : addMin(start,30);
+  const existing=classes.filter(o=>{
+    if(String(o.id)===String(editId)||o.locType!=='room') return false;
+    if(ROOM_FLOOR[o.location]!==floor) return false;
+    const oBack = o.location.endsWith('-back');
+    const oStart = o.start.replace(' ','T'), oEnd = o.end.replace(' ','T');
+    const oOS = oBack ? addMin(oEnd,-30) : oStart;
+    const oOE = oBack ? oEnd : addMin(oStart,30);
+    return myOS < oOE && myOE > oOS;
+  });
+  if(existing.length>=1){
+    const n=existing.length+1;
     si.style.display='block';
-    document.getElementById('standby-msg').textContent=`${FLOOR_LABEL[floor]}教室此時段已滿，儲存後將列為候補第 ${n} 位`;
+    document.getElementById('standby-msg').textContent=`${ROOM_LABEL[selRoom]}此時段教室已佔用，儲存後將列為候補第 ${n} 位`;
   } else { si.style.display='none'; }
 }
 async function saveClass() {
