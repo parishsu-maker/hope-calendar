@@ -310,6 +310,32 @@ textarea{resize:none;height:54px}
     <input type="hidden" id="f-start">
     <input type="hidden" id="f-end">
     <div class="fr"><label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">上課學員（逗號分隔）</label><textarea id="f-students" placeholder="王小明, 陳美麗"></textarea></div>
+    <!-- 重複排課 -->
+    <div id="class-repeat-wrap" style="margin-bottom:.5rem;border-top:1px solid #f0ede8;padding-top:.85rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="class-repeat-on" onchange="toggleClassRepeat()" style="width:auto;accent-color:#7BAE96">
+        <label for="class-repeat-on" style="font-size:12px;font-weight:500;color:#555;cursor:pointer">🔁 重複排課（批次）</label>
+      </div>
+      <div id="class-repeat-panel" style="display:none;background:#f8f8f6;border-radius:8px;padding:10px 12px">
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:5px">重複星期</label>
+          <div style="display:flex;gap:5px;flex-wrap:wrap" id="class-dow-group">
+            <label class="dow-btn"><input type="checkbox" value="1">一</label>
+            <label class="dow-btn"><input type="checkbox" value="2">二</label>
+            <label class="dow-btn"><input type="checkbox" value="3">三</label>
+            <label class="dow-btn"><input type="checkbox" value="4">四</label>
+            <label class="dow-btn"><input type="checkbox" value="5">五</label>
+            <label class="dow-btn"><input type="checkbox" value="6">六</label>
+            <label class="dow-btn"><input type="checkbox" value="0">日</label>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:4px">重複至</label>
+          <input type="date" id="class-repeat-until" style="font-size:12px;padding:5px 8px">
+        </div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px">⚠ 同教練同時段已有課程的日期會跳過</div>
+      </div>
+    </div>
     <div class="warn-box" id="warn-box">⚠️ <span id="warn-msg"></span></div>
     <div class="mf">
       <button class="btn-c" onclick="closeForm()">取消</button>
@@ -408,6 +434,32 @@ textarea{resize:none;height:54px}
       <label style="font-size:12px;color:#666;display:block;margin-bottom:7px;font-weight:500">休假教練</label>
       <div class="duty-coach-grid" id="leave-coach-grid"></div>
     </div>
+    <!-- 重複排假 -->
+    <div style="margin-top:.85rem;border-top:1px solid #f0ede8;padding-top:.85rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="leave-repeat-on" onchange="toggleLeaveRepeat()" style="width:auto;accent-color:#7B9CC9">
+        <label for="leave-repeat-on" style="font-size:12px;font-weight:500;color:#555;cursor:pointer">🔁 重複排假（批次）</label>
+      </div>
+      <div id="leave-repeat-panel" style="display:none;background:#f0f5fb;border-radius:8px;padding:10px 12px">
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:5px">重複星期</label>
+          <div style="display:flex;gap:5px;flex-wrap:wrap" id="leave-dow-group">
+            <label class="dow-btn"><input type="checkbox" value="1">一</label>
+            <label class="dow-btn"><input type="checkbox" value="2">二</label>
+            <label class="dow-btn"><input type="checkbox" value="3">三</label>
+            <label class="dow-btn"><input type="checkbox" value="4">四</label>
+            <label class="dow-btn"><input type="checkbox" value="5">五</label>
+            <label class="dow-btn"><input type="checkbox" value="6">六</label>
+            <label class="dow-btn"><input type="checkbox" value="0">日</label>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:4px">重複至</label>
+          <input type="date" id="leave-repeat-until" style="font-size:12px;padding:5px 8px">
+        </div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px">⚠ 已排過的日期會自動跳過</div>
+      </div>
+    </div>
     <div class="mf">
       <button class="btn-c" onclick="closeLeaveModal()">取消</button>
       <button class="btn-s" style="background:#7B9CC9" onclick="saveLeave()">儲存休假</button>
@@ -472,17 +524,34 @@ function getSameSlotRank(cls, allClasses) {
   return idx + 1; // 1-based
 }
 
+// 取得課程的教室佔用時間（只有開始後30分鐘）
+function getRoomOccupyEnd(startStr) {
+  const parts = startStr.replace(' ','T').split('T');
+  if (parts.length < 2) return startStr;
+  const [h, m] = parts[1].split(':').map(Number);
+  const totalMin = h * 60 + m + 30;
+  const nh = Math.floor(totalMin / 60);
+  const nm = totalMin % 60;
+  return `${parts[0]}T${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
+}
+
 function getRoomStatus(cls, allClasses) {
   if (cls.locType !== 'room') return { isStandby:false, label: cls.location ? (ROOM_LABEL[cls.location]||cls.location) : '' };
   const loc = cls.location;
   if (!ROOM_LABEL[loc]) return { isStandby:false, label: loc };
-  // 同一位置、時段重疊的課程，依 seq 排序
+  // 教室佔用時間：開始時間 + 30分鐘
+  const clsOccupyEnd = getRoomOccupyEnd(cls.start);
   const same = allClasses
-    .filter(o => o.locType==='room' && o.location===loc && cls.start < o.end && cls.end > o.start)
+    .filter(o => {
+      if (o.locType !== 'room' || o.location !== loc) return false;
+      const oOccupyEnd = getRoomOccupyEnd(o.start);
+      // 兩堂課的教室佔用時間是否重疊
+      return cls.start < oOccupyEnd && clsOccupyEnd > o.start;
+    })
     .sort((a,b) => a.seq - b.seq);
   const idx = same.findIndex(o => String(o.id)===String(cls.id));
   if (idx === 0) return { isStandby:false, label: ROOM_LABEL[loc] };
-  const n = idx; // 第2位 idx=1 → 候補1
+  const n = idx;
   return { isStandby:true, standbyNum:n, label:`${ROOM_LABEL[loc]}候補${n}` };
 }
 function isStandby(c) { return c.locType==='room' && getRoomStatus(c, classes).isStandby; }
@@ -810,7 +879,7 @@ function renderDay(root) {
       <div class="avatar" style="background:${co.color}">${co.abbr}</div>
       <div class="card-body">
         <div class="card-title">${c.name}</div>
-        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}<span class="seq-badge">#${getSameSlotRank(c,classes)||c.seq}</span>${sb?'<span class="standby-tag">⚠ 候補</span>':''}</div>
+        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}${sb?'<span class="standby-tag">⚠ 候補</span>":""}</div>
       </div>
       <div class="time-col">${c.start.replace(' ','T').split('T')[1]?.slice(0,5)||''} – ${c.end.replace(' ','T').split('T')[1]?.slice(0,5)||''}</div>
     </div>`;
@@ -823,7 +892,7 @@ function renderDay(root) {
 // ════════════════════════════════════════════
 function renderWeek(root) {
   const mon=mondayOf(curDate), today=new Date();
-  const HOURS=Array.from({length:16},(_,i)=>i+7), SLOT=46; // 7:00~22:00
+  const HOURS=Array.from({length:19},(_,i)=>i+6), SLOT=46; // 6:00~24:00
   let html='<div class="week-wrap"><div class="week-head-row"><div class="whc" style="border-right:1px solid #e4e0d8"></div>';
   for(let d=0;d<7;d++){const day=new Date(mon);day.setDate(mon.getDate()+d);const isTd=day.toDateString()===today.toDateString();html+=`<div class="whc"><div class="wdn">${DTW[day.getDay()]}</div><div class="wdd${isTd?' tw':''}">${day.getDate()}</div></div>`;}
   html+='</div><div class="week-duty-row"><div class="week-duty-cell" style="color:#666">值班</div>';
@@ -843,7 +912,7 @@ function renderWeek(root) {
   html+='</div></div></div>'; root.innerHTML=html;
   // 自動捲到 9:00 位置
   const scrollEl=document.getElementById('week-scroll-el');
-  if(scrollEl) scrollEl.scrollTop=(9-7)*SLOT;
+  if(scrollEl) scrollEl.scrollTop=(9-6)*SLOT;
   const wbg=document.getElementById('wbg');
   filtered().forEach(c=>{
     // 解析時間，支援 "2026-05-14T14:00" 和 "2026-05-14 14:00" 兩種格式
@@ -862,11 +931,11 @@ function renderWeek(root) {
     const eh=parseInt(ehStr)||0, em=parseInt(emStr)||0;
 
     // top 只計算分鐘偏移（課程放在對應小時的格子裡）
-    const top=sm*(SLOT/60);
+    const top=sm*(SLOT/60); // 分鐘偏移（已放在對應小時格子裡）
     const height=Math.max(((eh-sh)*60+(em-sm))*(SLOT/60),22);
     const co=getCoach(c.coachId), sb=isStandby(c);
     const cols=wbg.querySelectorAll(`.wcol[data-d="${diff}"]`);
-    const idx=sh-7; if(idx<0||idx>=HOURS.length) return;
+    const idx=sh-6; if(idx<0||idx>=HOURS.length) return;
     // 計算同一格有幾堂課，做並排顯示
     const siblings = cols[idx].querySelectorAll('.we').length;
     const w = siblings === 0 ? '100%' : '50%';
@@ -948,8 +1017,7 @@ function showDet(id) {
   document.getElementById('d-av').style.cssText=`background:${co.color};color:#fff;width:42px;height:42px;font-size:13px;font-weight:600`;
   document.getElementById('d-av').textContent=co.abbr;
   document.getElementById('d-name').textContent=c.name;
-  const slotRank = getSameSlotRank(c, classes) || c.seq;
-  document.getElementById('d-sub').textContent=`${co.name} · 同時段登記順序 #${slotRank}`;
+  document.getElementById('d-sub').textContent=`${co.name}`;
   let locRow='';
   if(c.locType==='room'){
     locRow=`<div class="det-row"><span style="font-size:14px;width:18px;flex-shrink:0">🏢</span><span style="${sb?'color:#E53935;font-weight:500':''}">${st.label}${sb?` （候補第${st.standbyNum}位）`:''}</span></div>`;
@@ -1040,6 +1108,12 @@ function openForm() {
   }
   buildRoomOpts();
   initTimeSelects();
+  document.getElementById('class-repeat-on').checked=false;
+  document.getElementById('class-repeat-panel').style.display='none';
+  document.querySelectorAll('#class-dow-group input[type=checkbox]').forEach(el=>el.checked=false);
+  document.getElementById('class-repeat-until').value='';
+  // 編輯課程時不顯示重複排課
+  document.getElementById('class-repeat-wrap').style.display=editId?'none':'block';
   if(isEdit){
     const c=classes.find(x=>String(x.id)===String(editId));
     if(c){
@@ -1105,7 +1179,7 @@ function checkStandby() {
 }
 async function saveClass() {
   const saveBtn = document.querySelector('#form-modal .btn-s');
-  if (saveBtn.disabled) return; // 防止連點
+  if (saveBtn.disabled) return;
   saveBtn.disabled = true; saveBtn.textContent = '儲存中...';
   const name=document.getElementById('f-name').value.trim();
   const coachId=parseInt(document.getElementById('f-coach').value);
@@ -1129,6 +1203,31 @@ async function saveClass() {
       showToast(editId ? '課程已更新' : '課程已新增');
       closeForm(); closeDet();
       await loadClasses();
+      // 批次重複排課
+      const repeatOn = document.getElementById('class-repeat-on').checked;
+      if(repeatOn && (data.success || data.id)){
+        const startDate = document.getElementById('f-start-date').value;
+        const dates = getRepeatDates(startDate, 'class-dow-group', 'class-repeat-until');
+        if(dates && dates.length){
+          let saved=0, skipped=0;
+          const startTime = document.getElementById('f-start-time').value;
+          const endTime   = document.getElementById('f-end-time').value;
+          for(const date of dates){
+            // 同教練同時段已有課程則跳過
+            const newStart = `${date}T${startTime}`;
+            const newEnd   = `${date}T${endTime}`;
+            const conflict = classes.some(o=>String(o.coachId)===String(coachId)&&o.start===newStart);
+            if(conflict){ skipped++; continue; }
+            const repeatCls = { name, coachId, locType:curLT, location, start:newStart, end:newEnd, students };
+            try {
+              await apiCall({ action:'addClass', cls: repeatCls });
+              saved++;
+            } catch(e) {}
+          }
+          await loadClasses();
+          showToast(`已新增 ${saved+1} 堂，跳過 ${skipped} 堂`);
+        }
+      }
     } else { showToast(data.error || '儲存失敗'); }
   } catch(e){ showToast('連線失敗，請稍後再試'); }
   finally { saveBtn.disabled = false; saveBtn.textContent = '儲存'; }
@@ -1159,6 +1258,10 @@ async function loadLeave() {
 
 function openLeaveModal() {
   document.getElementById('leave-date-input').value = fmtDate(curDate);
+  document.getElementById('leave-repeat-on').checked = false;
+  document.getElementById('leave-repeat-panel').style.display = 'none';
+  document.querySelectorAll('#leave-dow-group input[type=checkbox]').forEach(el=>el.checked=false);
+  document.getElementById('leave-repeat-until').value = '';
   onLeaveDateChange();
   document.getElementById('leave-modal').classList.add('open');
 }
@@ -1198,12 +1301,25 @@ function buildLeaveGrid() {
 async function saveLeave() {
   if (!leaveEditDate) { showToast('請選擇日期'); return; }
   const coachIds = [...leaveSelIds].join(',');
+  // 先儲存當天
   leaveData[leaveEditDate] = [...leaveSelIds].map(Number);
   closeLeaveModal(); render();
-  try {
-    await apiCall({ action:'saveLeave', date:leaveEditDate, coachIds });
-    showToast('休假已儲存並同步');
-  } catch(e) { showToast('本地已儲存，但同步失敗'); }
+  try { await apiCall({ action:'saveLeave', date:leaveEditDate, coachIds }); } catch(e) {}
+
+  // 批次重複
+  const repeatOn = document.getElementById('leave-repeat-on').checked;
+  if (!repeatOn) { showToast('休假已儲存並同步'); return; }
+  const dates = getRepeatDates(leaveEditDate, 'leave-dow-group', 'leave-repeat-until');
+  if (!dates) return;
+  let saved=0, skipped=0;
+  for(const date of dates){
+    const existing = leaveData[date] || [];
+    if(existing.length > 0){ skipped++; continue; } // 已有休假跳過
+    leaveData[date] = [...leaveSelIds].map(Number);
+    try { await apiCall({ action:'saveLeave', date, coachIds }); saved++; } catch(e) {}
+  }
+  render();
+  showToast(`已儲存 ${saved+1} 天，跳過 ${skipped} 天（已排過）`);
 }
 
 // ════════════════════════════════════════════
@@ -1246,6 +1362,27 @@ async function loadDuty() {
   } catch(e) { console.warn('loadDuty failed', e); }
 }
 
+function toggleLeaveRepeat(){
+  document.getElementById('leave-repeat-panel').style.display =
+    document.getElementById('leave-repeat-on').checked ? 'block' : 'none';
+}
+function toggleClassRepeat(){
+  document.getElementById('class-repeat-panel').style.display =
+    document.getElementById('class-repeat-on').checked ? 'block' : 'none';
+}
+function getRepeatDates(startDate, dowGroupId, untilId) {
+  const dows = [...document.querySelectorAll(`#${dowGroupId} input[type=checkbox]:checked`)].map(el=>Number(el.value));
+  const until = document.getElementById(untilId).value;
+  if (!dows.length || !until) { showToast('請選擇重複星期和結束日期'); return null; }
+  const dates = [];
+  const cur = new Date(startDate); cur.setDate(cur.getDate()+1); // 從隔天開始
+  const end = new Date(until);
+  while (cur <= end) {
+    if (dows.includes(cur.getDay())) dates.push(fmtDate(cur));
+    cur.setDate(cur.getDate()+1);
+  }
+  return dates;
+}
 function toggleDutyRepeat(){
   const on = document.getElementById('duty-repeat-on').checked;
   document.getElementById('duty-repeat-panel').style.display = on ? 'block' : 'none';
