@@ -1204,7 +1204,9 @@ async function saveClass() {
   const wb=document.getElementById('warn-box');
   if(warns.length){wb.style.display='block';document.getElementById('warn-msg').textContent=warns.join('；');}
   else wb.style.display='none';
-  const cls = { id:editId||undefined, name, coachId, locType:curLT, location, start, end, students };
+  // 編輯課程時給予新 seq，確保後來修改的排在後面
+  const newSeq = editId ? Math.max(...classes.map(c=>c.seq), 0) + 1 : undefined;
+  const cls = { id:editId||undefined, name, coachId, locType:curLT, location, start, end, students, ...(newSeq?{seq:newSeq}:{}) };
   const action = editId ? 'updateClass' : 'addClass';
   try {
     const data = await apiCall({ action, cls });
