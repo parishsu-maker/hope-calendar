@@ -92,6 +92,7 @@ textarea{resize:none;height:54px}
 .loc-field{background:#f0e8d8;color:#8a6040}
 .loc-none{background:#eeeae4;color:#888}
 .loc-standby{background:#fcd4d4;color:#c0392b;font-weight:600}
+.loc-pg{background:#e8e0f0;color:#5a3a80}
 .seq-badge{font-size:10px;background:#eeeae4;color:#888;padding:1px 7px;border-radius:999px}
 .standby-tag{font-size:10px;background:#E53935;color:#fff;padding:2px 7px;border-radius:999px;font-weight:500}
 .empty-state{text-align:center;padding:3rem;color:#bbb;font-size:14px}
@@ -279,7 +280,7 @@ textarea{resize:none;height:54px}
     </div>
     <div id="room-picker" style="margin-bottom:.75rem">
       <label style="font-size:12px;color:#666;display:block;margin-bottom:6px;font-weight:500">選擇教室位置</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px" id="room-opts"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px" id="room-opts"></div>
     </div>
     <div id="field-picker" style="display:none;margin-bottom:.75rem">
       <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">外勤地點名稱</label>
@@ -409,23 +410,40 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyQaU3RiZlNgxvR1EiMhkav
 // ════════════════════════════════════════════
 //  教室候補邏輯
 // ════════════════════════════════════════════
-const ROOM_SLOTS  = { '2f':['2f-front','2f-back'], 'b1':['b1-front','b1-back'] };
-const ROOM_FLOOR  = { '2f-front':'2f','2f-back':'2f','b1-front':'b1','b1-back':'b1' };
-const ROOM_LABEL  = { '2f-front':'2樓前半','2f-back':'2樓後半','b1-front':'樓下前半','b1-back':'樓下後半' };
-const FLOOR_LABEL = { '2f':'2樓','b1':'樓下' };
+// 每個教室位置各自獨立，同一位置第2位起為候補
+const ROOM_SLOTS  = {
+  '2f-front':['2f-front'], '2f-back':['2f-back'],
+  'b1-front':['b1-front'], 'b1-back':['b1-back'],
+  'pg-front':['pg-front'], 'pg-back':['pg-back'],
+};
+const ROOM_FLOOR  = {
+  '2f-front':'2f-front','2f-back':'2f-back',
+  'b1-front':'b1-front','b1-back':'b1-back',
+  'pg-front':'pg-front','pg-back':'pg-back',
+};
+const ROOM_LABEL  = {
+  '2f-front':'2樓前半','2f-back':'2樓後半',
+  'b1-front':'樓下前半','b1-back':'樓下後半',
+  'pg-front':'推桿前半','pg-back':'推桿後半',
+};
+const FLOOR_LABEL = {
+  '2f-front':'2樓前半','2f-back':'2樓後半',
+  'b1-front':'樓下前半','b1-back':'樓下後半',
+  'pg-front':'推桿前半','pg-back':'推桿後半',
+};
 
 function getRoomStatus(cls, allClasses) {
   if (cls.locType !== 'room') return { isStandby:false, label: cls.location ? (ROOM_LABEL[cls.location]||cls.location) : '' };
-  const floor = ROOM_FLOOR[cls.location];
-  if (!floor) return { isStandby:false, label: ROOM_LABEL[cls.location]||cls.location };
+  const loc = cls.location;
+  if (!ROOM_LABEL[loc]) return { isStandby:false, label: loc };
+  // 同一位置、時段重疊的課程，依 seq 排序
   const same = allClasses
-    .filter(o => o.locType==='room' && ROOM_FLOOR[o.location]===floor && cls.start < o.end && cls.end > o.start)
+    .filter(o => o.locType==='room' && o.location===loc && cls.start < o.end && cls.end > o.start)
     .sort((a,b) => a.seq - b.seq);
   const idx = same.findIndex(o => String(o.id)===String(cls.id));
-  const slots = ROOM_SLOTS[floor];
-  if (idx < slots.length) return { isStandby:false, label: ROOM_LABEL[cls.location] };
-  const n = idx - slots.length + 1;
-  return { isStandby:true, standbyNum:n, label:`${FLOOR_LABEL[floor]}候補${n}` };
+  if (idx === 0) return { isStandby:false, label: ROOM_LABEL[loc] };
+  const n = idx; // 第2位 idx=1 → 候補1
+  return { isStandby:true, standbyNum:n, label:`${ROOM_LABEL[loc]}候補${n}` };
 }
 function isStandby(c) { return c.locType==='room' && getRoomStatus(c, classes).isStandby; }
 
@@ -464,10 +482,12 @@ const ADMIN = { id:0, name:'管理員', abbr:'AD', color:'#7BAE96', active:true,
 //  教室選項
 // ════════════════════════════════════════════
 const ROOMS_LIST = [
-  { id:'2f-front', label:'2樓前半',  floor:'2f' },
-  { id:'2f-back',  label:'2樓後半',  floor:'2f' },
-  { id:'b1-front', label:'樓下前半', floor:'b1' },
-  { id:'b1-back',  label:'樓下後半', floor:'b1' },
+  { id:'2f-front', label:'2樓前半',  group:'2f' },
+  { id:'2f-back',  label:'2樓後半',  group:'2f' },
+  { id:'b1-front', label:'樓下前半', group:'b1' },
+  { id:'b1-back',  label:'樓下後半', group:'b1' },
+  { id:'pg-front', label:'推桿前半', group:'pg' },
+  { id:'pg-back',  label:'推桿後半', group:'pg' },
 ];
 
 const DTW = ['日','一','二','三','四','五','六'];
@@ -518,8 +538,8 @@ function locTagHTML(c) {
   if (c.locType==='field') return `<span class="loc-tag loc-field">📍 ${c.location||'外勤'}</span>`;
   const st = getRoomStatus(c, classes);
   if (st.isStandby) return `<span class="loc-tag loc-standby">🏢 ${st.label}</span>`;
-  const cls = ROOM_FLOOR[c.location]==='2f' ? 'loc-2f' : 'loc-b1';
-  return `<span class="loc-tag ${cls}">🏢 ${st.label}</span>`;
+  const locCls = c.location.startsWith('2f') ? 'loc-2f' : c.location.startsWith('b1') ? 'loc-b1' : 'loc-pg';
+  return `<span class="loc-tag ${locCls}">🏢 ${st.label}</span>`;
 }
 
 // ════════════════════════════════════════════
@@ -1003,7 +1023,8 @@ function buildRoomOpts() {
   ROOMS_LIST.forEach(r=>{
     const isSel=selRoom===r.id; const lbl=document.createElement('label');
     lbl.className='room-opt'+(isSel?' sel':'');
-    lbl.innerHTML=`<input type="radio" name="rr" value="${r.id}" ${isSel?'checked':''}><span class="loc-tag ${r.floor==='2f'?'loc-2f':'loc-b1'}">${r.label}</span>`;
+    const rCls = r.id.startsWith('2f') ? 'loc-2f' : r.id.startsWith('b1') ? 'loc-b1' : 'loc-pg';
+    lbl.innerHTML=`<input type="radio" name="rr" value="${r.id}" ${isSel?'checked':''}><span class="loc-tag ${rCls}">${r.label}</span>`;
     lbl.querySelector('input').addEventListener('change',()=>{ selRoom=r.id; el.querySelectorAll('label').forEach(l=>l.classList.remove('sel')); lbl.classList.add('sel'); checkStandby(); });
     el.appendChild(lbl);
   });
