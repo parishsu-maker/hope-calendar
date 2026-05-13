@@ -791,7 +791,9 @@ function renderWeek(root) {
     const sh=parseInt(shStr)||0, sm=parseInt(smStr)||0;
     const eh=parseInt(ehStr)||0, em=parseInt(emStr)||0;
 
-    const top=(sh-7)*SLOT+sm*(SLOT/60), height=Math.max(((eh-sh)*60+(em-sm))*(SLOT/60),22);
+    // top 只計算分鐘偏移（課程放在對應小時的格子裡）
+    const top=sm*(SLOT/60);
+    const height=Math.max(((eh-sh)*60+(em-sm))*(SLOT/60),22);
     const co=getCoach(c.coachId), sb=isStandby(c);
     const cols=wbg.querySelectorAll(`.wcol[data-d="${diff}"]`);
     const idx=sh-7; if(idx<0||idx>=cols.length) return;
