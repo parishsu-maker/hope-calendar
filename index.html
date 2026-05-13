@@ -879,7 +879,7 @@ function renderDay(root) {
       <div class="avatar" style="background:${co.color}">${co.abbr}</div>
       <div class="card-body">
         <div class="card-title">${c.name}</div>
-        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}${sb?'<span class="standby-tag">⚠ 候補</span>":""}</div>
+        <div class="card-meta"><span>${co.name}</span>${locTagHTML(c)}${sb?'<span class="standby-tag">⚠ 候補</span>':''}</div>
       </div>
       <div class="time-col">${c.start.replace(' ','T').split('T')[1]?.slice(0,5)||''} – ${c.end.replace(' ','T').split('T')[1]?.slice(0,5)||''}</div>
     </div>`;
