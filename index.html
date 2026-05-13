@@ -69,6 +69,10 @@ textarea{resize:none;height:54px}
 /* ── 休假橫幅 ── */
 .leave-bar{background:#C8DCF0;border:1px solid #a8c4e0;border-radius:12px;padding:10px 18px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .leave-bar-label{font-size:13px;font-weight:600;color:#2a4a6a;white-space:nowrap;background:#fff;padding:3px 10px;border-radius:999px;border:1px solid #a8c4e0}
+/* 重複排班星期按鈕 */
+.dow-btn{display:inline-flex;align-items:center;gap:3px;padding:4px 9px;border-radius:999px;border:1.5px solid #d4d0c8;background:#fff;font-size:12px;font-weight:500;color:#666;cursor:pointer;user-select:none}
+.dow-btn input{width:auto;accent-color:#7BAE96;display:none}
+.dow-btn:has(input:checked){background:#7BAE96;color:#fff;border-color:#7BAE96}
 .leave-chip{display:inline-flex;align-items:center;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#fff}
 .leave-empty{font-size:13px;color:#7a9abf;font-style:italic}
 .duty-empty{font-size:13px;color:#555;font-style:italic}
@@ -355,6 +359,32 @@ textarea{resize:none;height:54px}
     <div class="duty-loc-section" id="duty-guohua-section">
       <div class="duty-loc-title"><span class="duty-loc-icon" style="background:#8FB5C9"></span>國華球場值班</div>
       <div class="duty-coach-grid" id="duty-guohua-grid"></div>
+    </div>
+    <!-- 重複排班 -->
+    <div style="margin-top:.85rem;border-top:1px solid #f0ede8;padding-top:.85rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="duty-repeat-on" onchange="toggleDutyRepeat()" style="width:auto;accent-color:#7BAE96">
+        <label for="duty-repeat-on" style="font-size:12px;font-weight:500;color:#555;cursor:pointer">🔁 重複排班（批次）</label>
+      </div>
+      <div id="duty-repeat-panel" style="display:none;background:#f8f8f6;border-radius:8px;padding:10px 12px">
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:5px">重複星期</label>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <label class="dow-btn"><input type="checkbox" value="1">一</label>
+            <label class="dow-btn"><input type="checkbox" value="2">二</label>
+            <label class="dow-btn"><input type="checkbox" value="3">三</label>
+            <label class="dow-btn"><input type="checkbox" value="4">四</label>
+            <label class="dow-btn"><input type="checkbox" value="5">五</label>
+            <label class="dow-btn"><input type="checkbox" value="6">六</label>
+            <label class="dow-btn"><input type="checkbox" value="0">日</label>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:4px">重複至</label>
+          <input type="date" id="duty-repeat-until" style="font-size:12px;padding:5px 8px">
+        </div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px">⚠ 已排過的日期會自動跳過，不覆蓋</div>
+      </div>
     </div>
     <div class="mf">
       <button class="btn-c" onclick="closeDutyModal()">取消</button>
@@ -1162,9 +1192,13 @@ async function saveLeave() {
 // ════════════════════════════════════════════
 function openDutyModal(){
   document.getElementById('duty-date-input').value = fmtDate(curDate);
-  // 根據角色顯示/隱藏學苑和國華區塊
   document.getElementById('duty-xueyuan-section').style.display = isXueyuan() ? 'block' : 'none';
   document.getElementById('duty-guohua-section').style.display  = isGuohua()  ? 'block' : 'none';
+  // 重置重複排班
+  document.getElementById('duty-repeat-on').checked = false;
+  document.getElementById('duty-repeat-panel').style.display = 'none';
+  document.querySelectorAll('#duty-repeat-panel input[type=checkbox]').forEach(el=>el.checked=false);
+  document.getElementById('duty-repeat-until').value = '';
   onDutyDateChange();
   document.getElementById('duty-modal').classList.add('open');
 }
@@ -1193,23 +1227,65 @@ async function loadDuty() {
   } catch(e) { console.warn('loadDuty failed', e); }
 }
 
+function toggleDutyRepeat(){
+  const on = document.getElementById('duty-repeat-on').checked;
+  document.getElementById('duty-repeat-panel').style.display = on ? 'block' : 'none';
+}
+
+// 取得要批次排班的所有日期
+function getDutyRepeatDates(startDate) {
+  const repeatOn = document.getElementById('duty-repeat-on').checked;
+  if (!repeatOn) return [startDate];
+
+  const dows = [...document.querySelectorAll('#duty-repeat-panel input[type=checkbox]:checked')].map(el=>Number(el.value));
+  const until = document.getElementById('duty-repeat-until').value;
+  if (!dows.length || !until) { showToast('請選擇重複星期和結束日期'); return null; }
+
+  const dates = [];
+  const cur = new Date(startDate);
+  const end = new Date(until);
+  while (cur <= end) {
+    if (dows.includes(cur.getDay())) {
+      dates.push(fmtDate(cur));
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return dates;
+}
+
 async function saveDuty(){
   if(!dutyEditDate){showToast('請選擇日期');return;}
-  // 根據角色決定要更新哪個區塊，不影響另一個
-  const existing = dutyData[dutyEditDate] || { xueyuan:[], guohua:[] };
-  const xueyuan = isXueyuan() ? [...dutySelX].join(',') : existing.xueyuan.join(',');
-  const guohua  = isGuohua()  ? [...dutySelG].join(',') : existing.guohua.join(',');
-  // 先更新本地
-  dutyData[dutyEditDate]={
-    xueyuan: isXueyuan() ? [...dutySelX].map(Number) : existing.xueyuan,
-    guohua:  isGuohua()  ? [...dutySelG].map(Number) : existing.guohua,
-  };
+  const dates = getDutyRepeatDates(dutyEditDate);
+  if(!dates) return;
+
   closeDutyModal(); render();
-  // 再同步到 Google Sheets
-  try {
-    await apiCall({ action:'saveDuty', date:dutyEditDate, xueyuan, guohua });
-    showToast('值班已儲存並同步');
-  } catch(e) { showToast('本地已儲存，但同步失敗'); }
+
+  let saved=0, skipped=0;
+  for(const date of dates){
+    const existing = dutyData[date] || { xueyuan:[], guohua:[] };
+    // 跳過已有資料的日期
+    const xHasData = existing.xueyuan.length > 0;
+    const gHasData = existing.guohua.length > 0;
+    const xSkip = isXueyuan() && xHasData && date !== dutyEditDate;
+    const gSkip = isGuohua()  && gHasData && date !== dutyEditDate;
+    if(xSkip && gSkip){ skipped++; continue; }
+
+    const xueyuan = (isXueyuan() && !xSkip) ? [...dutySelX].join(',') : existing.xueyuan.join(',');
+    const guohua  = (isGuohua()  && !gSkip) ? [...dutySelG].join(',') : existing.guohua.join(',');
+
+    // 更新本地
+    dutyData[date]={
+      xueyuan: (isXueyuan() && !xSkip) ? [...dutySelX].map(Number) : existing.xueyuan,
+      guohua:  (isGuohua()  && !gSkip) ? [...dutySelG].map(Number) : existing.guohua,
+    };
+    try {
+      await apiCall({ action:'saveDuty', date, xueyuan, guohua });
+      saved++;
+    } catch(e) { console.warn('saveDuty failed for', date, e); }
+  }
+  render();
+  if(dates.length > 1) showToast(`已儲存 ${saved} 天，跳過 ${skipped} 天（已排過）`);
+  else showToast('值班已儲存並同步');
 }
 
 // ════════════════════════════════════════════
