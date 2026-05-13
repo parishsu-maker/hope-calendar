@@ -520,15 +520,29 @@ function getSameSlotRank(cls, allClasses) {
   return idx + 1; // 1-based
 }
 
-// 取得課程的教室佔用時間（只有開始後30分鐘）
-function getRoomOccupyEnd(startStr) {
-  const parts = startStr.replace(' ','T').split('T');
-  if (parts.length < 2) return startStr;
-  const [h, m] = parts[1].split(':').map(Number);
-  const totalMin = h * 60 + m + 30;
-  const nh = Math.floor(totalMin / 60);
-  const nm = totalMin % 60;
-  return `${parts[0]}T${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
+// 取得課程的教室實際佔用時間區間
+// 前半 = 開始後30分鐘，後半 = 結束前30分鐘
+function getRoomOccupyInterval(cls) {
+  const isBack = cls.location && cls.location.endsWith('-back');
+  const startStr = cls.start.replace(' ','T');
+  const endStr   = cls.end.replace(' ','T');
+
+  function addMin(dtStr, min) {
+    const parts = dtStr.split('T');
+    const [h, m] = parts[1].split(':').map(Number);
+    const total = h * 60 + m + min;
+    const nh = Math.floor(total / 60) % 24;
+    const nm = total % 60;
+    return `${parts[0]}T${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
+  }
+
+  if (isBack) {
+    // 後半：結束前30分鐘
+    return { occupyStart: addMin(endStr, -30), occupyEnd: endStr };
+  } else {
+    // 前半：開始後30分鐘
+    return { occupyStart: startStr, occupyEnd: addMin(startStr, 30) };
+  }
 }
 
 function getRoomStatus(cls, allClasses) {
@@ -537,16 +551,15 @@ function getRoomStatus(cls, allClasses) {
   if (!ROOM_LABEL[loc]) return { isStandby:false, label: loc };
   const floor = ROOM_FLOOR[loc];
 
-  // 教室佔用時間：開始時間 + 30分鐘
-  const clsOccupyEnd = getRoomOccupyEnd(cls.start);
+  const { occupyStart: clsOS, occupyEnd: clsOE } = getRoomOccupyInterval(cls);
 
-  // 同樓層（不限前半/後半）、佔用時間重疊的課程
+  // 同樓層、教室佔用時間重疊的課程
   const same = allClasses
     .filter(o => {
       if (o.locType !== 'room') return false;
       if (ROOM_FLOOR[o.location] !== floor) return false;
-      const oOccupyEnd = getRoomOccupyEnd(o.start);
-      return cls.start < oOccupyEnd && clsOccupyEnd > o.start;
+      const { occupyStart: oOS, occupyEnd: oOE } = getRoomOccupyInterval(o);
+      return clsOS < oOE && clsOE > oOS;
     })
     .sort((a,b) => a.seq - b.seq);
 
@@ -648,7 +661,8 @@ function locTagHTML(c) {
   if (c.locType==='field') return `<span class="loc-tag loc-field">📍 ${c.location||'外勤'}</span>`;
   const st = getRoomStatus(c, classes);
   if (st.isStandby) return `<span class="loc-tag loc-standby">🏢 ${st.label}</span>`;
-  const locCls = c.location.startsWith('2f') ? 'loc-2f' : c.location.startsWith('b1') ? 'loc-b1' : 'loc-pg';
+  const floor = ROOM_FLOOR[c.location];
+  const locCls = floor==='2f' ? 'loc-2f' : floor==='b1' ? 'loc-b1' : 'loc-pg';
   return `<span class="loc-tag ${locCls}">🏢 ${st.label}</span>`;
 }
 
