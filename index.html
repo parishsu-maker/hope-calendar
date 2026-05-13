@@ -492,17 +492,13 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyQaU3RiZlNgxvR1EiMhkav
 // ════════════════════════════════════════════
 //  教室候補邏輯
 // ════════════════════════════════════════════
-// 每個教室位置各自獨立，同一位置第2位起為候補
-const ROOM_SLOTS  = {
-  '2f-front':['2f-front'], '2f-back':['2f-back'],
-  'b1-front':['b1-front'], 'b1-back':['b1-back'],
-  'pg-front':['pg-front'], 'pg-back':['pg-back'],
-};
+// 樓層群組：同樓層同時段只能有一堂課
 const ROOM_FLOOR  = {
-  '2f-front':'2f-front','2f-back':'2f-back',
-  'b1-front':'b1-front','b1-back':'b1-back',
-  'pg-front':'pg-front','pg-back':'pg-back',
+  '2f-front':'2f','2f-back':'2f',
+  'b1-front':'b1','b1-back':'b1',
+  'pg-front':'pg','pg-back':'pg',
 };
+const FLOOR_NAME = { '2f':'2樓', 'b1':'樓下', 'pg':'推桿' };
 const ROOM_LABEL  = {
   '2f-front':'2樓前半','2f-back':'2樓後半',
   'b1-front':'樓下前半','b1-back':'樓下後半',
@@ -539,16 +535,21 @@ function getRoomStatus(cls, allClasses) {
   if (cls.locType !== 'room') return { isStandby:false, label: cls.location ? (ROOM_LABEL[cls.location]||cls.location) : '' };
   const loc = cls.location;
   if (!ROOM_LABEL[loc]) return { isStandby:false, label: loc };
+  const floor = ROOM_FLOOR[loc];
+
   // 教室佔用時間：開始時間 + 30分鐘
   const clsOccupyEnd = getRoomOccupyEnd(cls.start);
+
+  // 同樓層（不限前半/後半）、佔用時間重疊的課程
   const same = allClasses
     .filter(o => {
-      if (o.locType !== 'room' || o.location !== loc) return false;
+      if (o.locType !== 'room') return false;
+      if (ROOM_FLOOR[o.location] !== floor) return false;
       const oOccupyEnd = getRoomOccupyEnd(o.start);
-      // 兩堂課的教室佔用時間是否重疊
       return cls.start < oOccupyEnd && clsOccupyEnd > o.start;
     })
     .sort((a,b) => a.seq - b.seq);
+
   const idx = same.findIndex(o => String(o.id)===String(cls.id));
   if (idx === 0) return { isStandby:false, label: ROOM_LABEL[loc] };
   const n = idx;
