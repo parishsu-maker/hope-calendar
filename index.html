@@ -66,6 +66,11 @@ textarea{resize:none;height:54px}
 .duty-section-name{font-size:13px;color:#fff;font-weight:500;white-space:nowrap}
 .duty-chip{display:inline-flex;align-items:center;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#fff}
 .duty-mine{outline:2px solid #fff;outline-offset:2px}
+/* ── 休假橫幅 ── */
+.leave-bar{background:#C8DCF0;border:1px solid #a8c4e0;border-radius:12px;padding:10px 18px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.leave-bar-label{font-size:13px;font-weight:600;color:#2a4a6a;white-space:nowrap;background:#fff;padding:3px 10px;border-radius:999px;border:1px solid #a8c4e0}
+.leave-chip{display:inline-flex;align-items:center;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#fff}
+.leave-empty{font-size:13px;color:#7a9abf;font-style:italic}
 .duty-empty{font-size:13px;color:#555;font-style:italic}
 .duty-divider{width:1px;height:20px;background:#444;flex-shrink:0}
 
@@ -194,8 +199,7 @@ textarea{resize:none;height:54px}
     <button class="btn-primary" onclick="doLogin()">登入</button>
   </div>
   <div class="demo-row">
-    <button class="demo-btn" onclick="demoLogin('admin')">👤 以管理員預覽</button>
-    <button class="demo-btn" onclick="demoLogin('coach')">🎽 以教練預覽（KT）</button>
+    <button class="demo-btn" style="width:100%;font-size:13px;color:#7BAE96;border-color:#7BAE96" onclick="previewMode()">👁 純預覽（不需登入）</button>
   </div>
 </div>
 
@@ -235,10 +239,12 @@ textarea{resize:none;height:54px}
       <div class="filter-row" id="coach-filters"></div>
       <div style="display:flex;gap:7px">
         <button class="icon-btn" id="duty-btn" onclick="openDutyModal()" style="display:none;color:#7BAE96;border-color:#7BAE96">📋 排值班</button>
+        <button class="icon-btn" id="leave-btn" onclick="openLeaveModal()" style="display:none;color:#7B9CC9;border-color:#7B9CC9">🏖 排休假</button>
         <button class="add-btn" id="add-btn" onclick="openAdd()" style="display:none">＋ 新增課程</button>
       </div>
     </div>
     <div id="duty-bar-wrap"></div>
+    <div id="leave-bar-wrap"></div>
     <div id="cal-root"></div>
   </div>
 
@@ -342,6 +348,28 @@ textarea{resize:none;height:54px}
   </div>
 </div>
 
+<!-- ══ 排休假 Modal ══ -->
+<div class="modal-backdrop" id="leave-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div><div class="modal-title">排休假</div><div style="font-size:11px;color:#aaa;margin-top:2px" id="leave-date-label"></div></div>
+      <button class="xbtn" onclick="closeLeaveModal()">✕</button>
+    </div>
+    <div style="margin-bottom:.85rem">
+      <label style="font-size:12px;color:#666;display:block;margin-bottom:4px;font-weight:500">選擇日期</label>
+      <input type="date" id="leave-date-input" onchange="onLeaveDateChange()">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#666;display:block;margin-bottom:7px;font-weight:500">休假教練</label>
+      <div class="duty-coach-grid" id="leave-coach-grid"></div>
+    </div>
+    <div class="mf">
+      <button class="btn-c" onclick="closeLeaveModal()">取消</button>
+      <button class="btn-s" style="background:#7B9CC9" onclick="saveLeave()">儲存休假</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 顏色 Modal ══ -->
 <div class="modal-backdrop" id="color-modal">
   <div class="modal" style="width:340px">
@@ -435,6 +463,7 @@ const MTW = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10�
 //  值班資料（格式：{ 'YYYY-MM-DD':{ xueyuan:[id...], guohua:[id...] } }）
 // ════════════════════════════════════════════
 let dutyData = {};
+let leaveData = {}; // { 'YYYY-MM-DD': [coachId, ...] }
 let dutyEditDate='', dutySelX=new Set(), dutySelG=new Set();
 
 // ════════════════════════════════════════════
@@ -457,6 +486,15 @@ const fmtDT  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate()
 const fmtDate= d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const getCoach = id => coaches.find(c=>c.id===Number(id)) || { name:'未知',abbr:'?',color:'#aaa' };
 const activeCoaches = () => coaches.filter(c=>c.active);
+
+// ── 權限判斷 ──────────────────────────────────────────────────────
+const isAdmin     = () => me && me.role === 'admin';
+const isXueyuan   = () => me && (me.role === 'admin' || me.role === 'admin_xueyuan');
+const isGuohua    = () => me && (me.role === 'admin' || me.role === 'admin_guohua');
+const isAnyAdmin  = () => me && (me.role === 'admin' || me.role === 'admin_xueyuan' || me.role === 'admin_guohua');
+const isCoach     = () => me && me.role === 'coach';
+const canAddClass = () => me && (isAnyAdmin() || isCoach());
+const canManageCoaches = () => isAdmin();
 const dutyForDate   = ds => dutyData[ds] || { xueyuan:[], guohua:[] };
 function mondayOf(d){ const day=d.getDay(); const r=new Date(d); r.setDate(d.getDate()+(day===0?-6:1-day)); return r; }
 function filtered(){ return classes.filter(c=>coachFilter.has(String(c.coachId))); }
@@ -493,6 +531,16 @@ function renderDutyBar(ds) {
     <div class="duty-divider"></div>
     <div class="duty-section"><span class="duty-section-name">國華</span>${gH}</div>
   </div>`;
+}
+
+// ── 休假橫幅 ──────────────────────────────────────────────────────
+function renderLeaveBar(ds) {
+  const ids = leaveData[ds] || [];
+  if (!ids.length && !(isXueyuan() || isCoach())) return ''; // 沒人休假且無權限就不顯示
+  const chips = ids.length
+    ? ids.map(id => { const co=getCoach(id); return `<span class="leave-chip" style="background:${co.color}">${co.abbr}</span>`; }).join('')
+    : '<span class="leave-empty">無休假</span>';
+  return `<div class="leave-bar"><span class="leave-bar-label">今日休假</span>${chips}</div>`;
 }
 
 // ════════════════════════════════════════════
@@ -553,7 +601,33 @@ async function loadClasses() {
     }
   } catch (e) { console.warn('loadClasses failed', e); }
 }
-function demoLogin(t) { t==='admin' ? loginAs({...ADMIN,role:'admin'}) : loginAs({...coaches[0],role:'coach'}); }
+async function previewMode() {
+  // 載入教練和課程資料後以唯讀模式進入
+  const btn = document.querySelector('.demo-btn');
+  btn.disabled = true; btn.textContent = '載入中...';
+  try {
+    await loadCoaches();
+    await loadClasses();
+    await loadDuty();
+    await loadLeave();
+  } catch(e) { console.warn('preview load failed', e); }
+  me = { id:-1, name:'訪客', abbr:'訪', color:'#aaa', role:'preview' };
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display   = 'flex';
+  document.getElementById('uname').textContent = '純預覽模式';
+  const rt = document.getElementById('role-tag');
+  rt.textContent = '唯讀';
+  rt.style.cssText = 'background:#f0ede8;color:#aaa;font-size:11px;padding:2px 10px;border-radius:999px;margin-left:6px';
+  // 管理員按鈕不顯示
+  document.getElementById('add-btn').style.display = 'none';
+  document.getElementById('settings-btn').style.display = 'none';
+  document.getElementById('duty-btn').style.display = 'none';
+  coachFilter = new Set(coaches.map(c=>String(c.id)));
+  renderFilters();
+  render();
+  startAutoRefresh();
+  btn.disabled = false; btn.textContent = '👁 純預覽（不需登入）';
+}
 function loginAs(user) {
   me = user;
   document.getElementById('login-screen').style.display = 'none';
@@ -562,15 +636,16 @@ function loginAs(user) {
   const rt = document.getElementById('role-tag');
   rt.textContent = me.role==='admin' ? '管理員' : '教練';
   rt.style.cssText = `background:${me.color}22;color:${me.color};font-size:11px;padding:2px 10px;border-radius:999px;margin-left:6px`;
-  if (me.role==='admin') {
-    document.getElementById('add-btn').style.display  = 'flex';
-    document.getElementById('settings-btn').style.display = 'block';
-    document.getElementById('duty-btn').style.display = 'flex';
-  }
+  // 根據角色顯示對應按鈕
+  if (canAddClass()) document.getElementById('add-btn').style.display = 'flex';
+  if (isAdmin()) document.getElementById('settings-btn').style.display = 'block';
+  if (isXueyuan() || isGuohua()) document.getElementById('duty-btn').style.display = 'flex';
+  if (isXueyuan() || isCoach()) document.getElementById('leave-btn').style.display = 'flex';
   coachFilter = new Set(coaches.map(c=>String(c.id)));
   renderFilters();
   loadClasses();     // 從 Google Sheets 載入課程
   loadDuty();        // 從 Google Sheets 載入值班
+  loadLeave();       // 從 Google Sheets 載入休假
   startAutoRefresh(); // 每 30 秒自動同步
 }
 function doLogout() {
@@ -578,6 +653,7 @@ function doLogout() {
   document.getElementById('app-screen').style.display  = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('lp').value = '';
+  document.getElementById('lu').value = '';
   document.getElementById('lerr').style.display = 'none';
   ['add-btn','settings-btn','duty-btn'].forEach(id => document.getElementById(id).style.display='none');
   stopAutoRefresh(); // 停止自動同步
@@ -634,8 +710,15 @@ function render() {
   renderLabel();
   const dBar = document.getElementById('duty-bar-wrap');
   const root = document.getElementById('cal-root');
-  if (view==='day') { dBar.innerHTML=renderDutyBar(fmtDate(curDate)); renderDay(root); }
-  else { dBar.innerHTML=''; if(view==='week') renderWeek(root); else if(view==='month') renderMonth(root); else renderHalf(root); }
+  const lBar = document.getElementById('leave-bar-wrap');
+  if (view==='day') {
+    dBar.innerHTML = renderDutyBar(fmtDate(curDate));
+    lBar.innerHTML = renderLeaveBar(fmtDate(curDate));
+    renderDay(root);
+  } else {
+    dBar.innerHTML=''; lBar.innerHTML='';
+    if(view==='week') renderWeek(root); else if(view==='month') renderMonth(root); else renderHalf(root);
+  }
 }
 
 // ════════════════════════════════════════════
@@ -883,6 +966,67 @@ async function delClass() {
 }
 
 // ════════════════════════════════════════════
+//  休假管理
+// ════════════════════════════════════════════
+let leaveEditDate = '', leaveSelIds = new Set();
+
+async function loadLeave() {
+  try {
+    const data = await apiCall({ action:'getLeave' });
+    if (data.leave) { leaveData = data.leave; }
+  } catch(e) { console.warn('loadLeave failed', e); }
+}
+
+function openLeaveModal() {
+  document.getElementById('leave-date-input').value = fmtDate(curDate);
+  onLeaveDateChange();
+  document.getElementById('leave-modal').classList.add('open');
+}
+function closeLeaveModal() { document.getElementById('leave-modal').classList.remove('open'); }
+
+function onLeaveDateChange() {
+  const ds = document.getElementById('leave-date-input').value;
+  if (!ds) return;
+  leaveEditDate = ds;
+  document.getElementById('leave-date-label').textContent = ds;
+  const existing = leaveData[ds] || [];
+  leaveSelIds = new Set(existing.map(String));
+  buildLeaveGrid();
+}
+
+function buildLeaveGrid() {
+  const el = document.getElementById('leave-coach-grid'); el.innerHTML = '';
+  // 管理員可選所有人；教練只能選自己
+  const list = isAnyAdmin() ? activeCoaches() : activeCoaches().filter(c => c.id === me.id);
+  list.forEach(c => {
+    const btn = document.createElement('button');
+    const sel = leaveSelIds.has(String(c.id));
+    btn.className = 'duty-coach-btn' + (sel ? ' selected' : '');
+    if (sel) btn.style.background = c.color;
+    btn.textContent = `${c.abbr} ${c.name}`;
+    btn.onclick = () => {
+      if (leaveSelIds.has(String(c.id))) {
+        leaveSelIds.delete(String(c.id)); btn.classList.remove('selected'); btn.style.background = '';
+      } else {
+        leaveSelIds.add(String(c.id)); btn.classList.add('selected'); btn.style.background = c.color;
+      }
+    };
+    el.appendChild(btn);
+  });
+}
+
+async function saveLeave() {
+  if (!leaveEditDate) { showToast('請選擇日期'); return; }
+  const coachIds = [...leaveSelIds].join(',');
+  leaveData[leaveEditDate] = [...leaveSelIds].map(Number);
+  closeLeaveModal(); render();
+  try {
+    await apiCall({ action:'saveLeave', date:leaveEditDate, coachIds });
+    showToast('休假已儲存並同步');
+  } catch(e) { showToast('本地已儲存，但同步失敗'); }
+}
+
+// ════════════════════════════════════════════
 //  值班排班
 // ════════════════════════════════════════════
 function openDutyModal(){ document.getElementById('duty-date-input').value=fmtDate(curDate); onDutyDateChange(); document.getElementById('duty-modal').classList.add('open'); }
@@ -990,11 +1134,13 @@ function startAutoRefresh() {
     if (!me) return;
     try {
       // 從 Sheets 拉最新值班和課程，直接覆蓋本地資料
-      const [dutyRes, classRes] = await Promise.all([
+      const [dutyRes, classRes, leaveRes] = await Promise.all([
         apiCall({ action:'getDuty' }),
-        apiCall({ action:'getClasses' })
+        apiCall({ action:'getClasses' }),
+        apiCall({ action:'getLeave' })
       ]);
       if (dutyRes.duty) dutyData = dutyRes.duty;
+      if (leaveRes.leave) leaveData = leaveRes.leave;
       if (classRes.classes) {
         classes = classRes.classes.map(c => ({ ...c, coachId: Number(c.coachId), seq: Number(c.seq) }));
         nextSeq = classes.reduce((m,c) => Math.max(m, c.seq), 0);
