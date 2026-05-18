@@ -774,9 +774,7 @@ async function previewMode() {
   btn.disabled = true; btn.textContent = '載入中...';
   try {
     await loadCoaches();
-    await loadClasses();
-    await loadDuty();
-    await loadLeave();
+    await Promise.all([loadClasses(), loadDuty(), loadLeave()]);
   } catch(e) { console.warn('preview load failed', e); }
   me = { id:-1, name:'訪客', abbr:'訪', color:'#aaa', role:'preview' };
   document.getElementById('login-screen').style.display = 'none';
@@ -810,9 +808,8 @@ function loginAs(user) {
   if (isXueyuan() || isCoach()) document.getElementById('leave-btn').style.display = 'flex';
   coachFilter = new Set(coaches.map(c=>String(c.id)));
   renderFilters();
-  loadClasses();     // 從 Google Sheets 載入課程
-  loadDuty();        // 從 Google Sheets 載入值班
-  loadLeave();       // 從 Google Sheets 載入休假
+  // 平行載入所有資料，加快速度
+  Promise.all([loadClasses(), loadDuty(), loadLeave()]).then(()=>render());
   startAutoRefresh(); // 每 30 秒自動同步
 }
 function doLogout() {
@@ -1554,9 +1551,9 @@ function startAutoRefresh() {
     try {
       // 從 Sheets 拉最新值班和課程，直接覆蓋本地資料
       const [dutyRes, classRes, leaveRes] = await Promise.all([
-        apiCall({ action:'getDuty' }),
-        apiCall({ action:'getClasses' }),
-        apiCall({ action:'getLeave' })
+        apiCall({ action:'getDuty' }, 8000),
+        apiCall({ action:'getClasses' }, 8000),
+        apiCall({ action:'getLeave' }, 8000)
       ]);
       if (dutyRes.duty) dutyData = dutyRes.duty;
       if (leaveRes.leave) leaveData = leaveRes.leave;
